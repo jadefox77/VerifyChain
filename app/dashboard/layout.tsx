@@ -16,12 +16,12 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 lg:flex">
       <Sidebar
         email={session.user?.email ?? ""}
         signOutAction={handleSignOut}
       />
-      <main className="flex-1 p-4 md:p-8 overflow-auto min-w-0">
+      <main className="flex-1 min-w-0 pt-14 lg:pt-0 p-4 md:p-8 overflow-auto">
         {children}
       </main>
     </div>

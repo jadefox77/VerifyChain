@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+   url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------
+// AUTH TABLES (required by NextAuth PrismaAdapter)
+// -----------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  accounts      Account[]
+  sessions      Session[]
+
+  manufacturer  Manufacturer?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// -----------------------------------------------
+// VERIFYCHAIN CORE TABLES
+// -----------------------------------------------
+
+model Manufacturer {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  companyName String
+  logoUrl     String?
+  contactEmail String
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products Product[]
+  batches  Batch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id             String @id @default(cuid())
+  manufacturerId String
+  name           String
+  category       String
+  description    String?
+
+  manufacturer Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  batches      Batch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Batch {
+  id             String @id @default(cuid())
+  manufacturerId String
+  productId      String
+  quantity       Int
+  notes          String?
+
+  manufacturer Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  bottles      Bottle[]
+
+  createdAt DateTime @default(now())
+}
+
+model Bottle {
+  id        String       @id @default(cuid())
+  serialId  String       @unique
+  batchId   String
+  status    BottleStatus @default(MINT)
+
+  firstScannedAt  DateTime?
+  firstScannedLat Float?
+  firstScannedLng Float?
+  firstPhoneHash  String?
+
+  batch    Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  scanLogs ScanLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ScanLog {
+  id         String    @id @default(cuid())
+  bottleId   String
+  phoneHash  String?
+  lat        Float?
+  lng        Float?
+  city       String?
+  country    String?
+  scanCount  Int
+  fraudFlag  Boolean   @default(false)
+  flagReason String?
+
+  bottle Bottle @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+enum BottleStatus {
+  MINT
+  OPENED
+  FLAGGED
+}

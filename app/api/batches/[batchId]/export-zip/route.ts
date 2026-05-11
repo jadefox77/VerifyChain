@@ -64,8 +64,9 @@ export async function GET(
   folder.file("serials.csv", csv)
 
   const zipBuffer = await zip.generateAsync({ type: "uint8array" })
+const blob = new Blob([zipBuffer], { type: "application/zip" })
 
-return new NextResponse(zipBuffer, {
+return new NextResponse(blob, {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="batch-${batchId}.zip"`,

@@ -65,61 +65,60 @@ export default async function DashboardPage() {
       </div>
 
       {/* Recent activity */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Recent Scans</h3>
-          <a
-            href="/dashboard/scans"
-            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            View all
-          </a>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+  <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Recent Scans</h3>
+     <a
+      href="/dashboard/scans"
+      className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+    >
+      View all
+    </a>
+  </div>
+  {recentScans.length === 0 ? (
+    <div className="p-8 text-center">
+      <p className="text-gray-400 dark:text-gray-500 text-sm">No scans yet.</p>
+    </div>
+  ) : (
+    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+      {recentScans.map((log) => (
+        <div
+          key={log.id}
+          className="px-6 py-3 flex items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <span className={`shrink-0 w-2 h-2 rounded-full ${
+              log.fraudFlag ? "bg-red-500" : "bg-green-400"
+            }`} />
+            <div className="min-w-0">
+              <p className="text-sm text-gray-900 dark:text-white truncate">
+                {log.bottle.batch.product.name}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
+                {formatSerialId(log.bottle.serialId)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
+            {log.fraudFlag && (
+              <span className="text-xs font-medium text-red-600 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded-full">
+                Fraud
+              </span>
+            )}
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {new Date(log.createdAt).toLocaleDateString("en-NG", {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          </div>
         </div>
-
-        {recentScans.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-gray-400 text-sm">No scans yet.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {recentScans.map((log) => (
-              <div
-                key={log.id}
-                className="px-6 py-3 flex items-center justify-between gap-4"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`shrink-0 w-2 h-2 rounded-full ${
-                    log.fraudFlag ? "bg-red-500" : "bg-green-400"
-                  }`} />
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-900 truncate">
-                      {log.bottle.batch.product.name}
-                    </p>
-                    <p className="text-xs text-gray-400 font-mono">
-                      {formatSerialId(log.bottle.serialId)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 shrink-0">
-                  {log.fraudFlag && (
-                    <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
-                      Fraud
-                    </span>
-                  )}
-                  <p className="text-xs text-gray-400">
-                    {new Date(log.createdAt).toLocaleDateString("en-NG", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      ))}
+    </div>
+  )}
+</div>
     </div>
   )
 }
@@ -134,9 +133,9 @@ function StatCard({
   highlight?: boolean
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-3xl font-bold mt-2 ${highlight ? "text-red-500" : "text-gray-900"}`}>
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</p>
+      <p className={`text-3xl font-bold mt-2 ${highlight ? "text-red-500" : "text-gray-900 dark:text-white"}`}>
         {value}
       </p>
     </div>

@@ -1,28 +1,33 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
+import { ThemeToggle } from "@/components/theme-toggle"
+
 
 export default async function HomePage() {
   const session = await auth()
   if (session) redirect("/dashboard")
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-white dark:bg-gray-950">
 
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm font-bold">V</span>
-          </div>
-          <span className="font-bold text-gray-900">VerifyChain Africa</span>
-        </div>
-        <a
-          href="/login"
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 transition-colors"
-        >
-          Manufacturer Login
-        </a>
-      </nav>
+  {/* Nav */}
+  <nav className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto border-b border-gray-100 dark:border-gray-800">
+    <div className="flex items-center gap-2">
+      <div className="w-8 h-8 bg-gray-900 dark:bg-white rounded-lg flex items-center justify-center">
+        <span className="text-white dark:text-gray-900 text-sm font-bold">V</span>
+      </div>
+      <span className="font-bold text-gray-900 dark:text-white">VerifyChain Africa</span>
+    </div>
+    <div className="flex items-center gap-3">
+      <ThemeToggle />
+      <a
+        href="/login"
+        className="rounded-lg bg-gray-900 dark:bg-white px-4 py-2 text-sm font-semibold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors"
+      >
+        Manufacturer Login
+      </a>
+    </div>
+  </nav>
 
       {/* Hero */}
       <section className="max-w-4xl mx-auto px-6 pt-20 pb-24 text-center">

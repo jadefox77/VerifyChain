@@ -34,16 +34,16 @@ export default async function BatchesPage() {
   return (
     <div>
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900">Batches</h2>
-        <p className="text-gray-500 text-sm mt-1">
+        <h2 className="text-2xl font-bold dark:text-white dark:text-white">Batches</h2>
+        <p className="dark:dark:text-gray-500 text-sm mt-1">
           Generate serialized QR codes for your products.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-5">
+          <div className="dark:bg-gray-900 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 dark:border-gray-800 shadow-sm p-6">
+            <h3 className="text-base font-semibold dark:text-white dark:text-white mb-5">
               Generate New Batch
             </h3>
             <GenerateForm products={products} />
@@ -75,10 +75,10 @@ function GenerateForm({ products }: { products: Product[] }) {
   if (products.length === 0) {
     return (
       <div className="text-center py-4">
-        <p className="text-sm text-gray-500">You need to add a product first.</p>
+        <p className="text-sm dark:dark:text-gray-500">You need to add a product first.</p>
         <a
           href="/dashboard/products"
-          className="mt-3 inline-block text-sm font-medium text-gray-900 underline underline-offset-2"
+          className="mt-3 inline-block text-sm font-medium dark:text-white dark:text-white underline underline-offset-2"
         >
           Add a product
         </a>
@@ -96,7 +96,7 @@ function GenerateForm({ products }: { products: Product[] }) {
           id="productId"
           name="productId"
           required
-          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
+          className="w-full rounded-lg border border-gray-300 dark:bg-gray-900 dark:bg-gray-900 px-4 py-2.5 text-sm dark:text-white dark:text-white shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
         >
           <option value="">Select a product</option>
           {products.map((p) => (
@@ -119,22 +119,22 @@ function GenerateForm({ products }: { products: Product[] }) {
           min={1}
           max={5000}
           placeholder="e.g. 1000"
-          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
+          className="w-full rounded-lg border border-gray-300 dark:bg-gray-900 dark:bg-gray-900 px-4 py-2.5 text-sm dark:text-white dark:text-white placeholder:dark:text-gray-500 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
         />
-        <p className="text-xs text-gray-400">Maximum 5,000 per batch</p>
+        <p className="text-xs dark:text-gray-500">Maximum 5,000 per batch</p>
       </div>
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="notes" className="text-sm font-medium text-gray-700">
           Notes{" "}
-          <span className="text-gray-400 font-normal">(optional)</span>
+          <span className="dark:text-gray-500 font-normal">(optional)</span>
         </label>
         <input
           id="notes"
           name="notes"
           type="text"
           placeholder="e.g. April production run"
-          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
+          className="w-full rounded-lg border border-gray-300 dark:bg-gray-900 dark:bg-gray-900 px-4 py-2.5 text-sm dark:text-white dark:text-white placeholder:dark:text-gray-500 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
         />
       </div>
 
@@ -151,8 +151,8 @@ function GenerateForm({ products }: { products: Product[] }) {
 function BatchList({ batches }: { batches: BatchItem[] }) {
   if (batches.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-8 text-center">
-        <p className="text-gray-400 text-sm">
+      <div className="dark:bg-gray-900 dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 p-8 text-center">
+        <p className="dark:text-gray-500 text-sm">
           No batches yet. Generate your first batch.
         </p>
       </div>
@@ -178,21 +178,21 @@ function BatchCard({ batch }: { batch: BatchItem }) {
   return (
     <a
       href={`/dashboard/batches/${batch.id}`}
-      className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 flex items-center justify-between gap-4 hover:border-gray-400 transition-colors"
+      className="dark:bg-gray-900 dark:bg-gray-900 rounded-xl border dark:border-gray-800 dark:border-gray-800 shadow-sm px-5 py-4 flex items-center justify-between gap-4 hover:border-gray-400 transition-colors"
     >
       <div>
-        <p className="text-sm font-semibold text-gray-900">
+        <p className="text-sm font-semibold dark:text-white dark:text-white">
           {batch.product.name}
         </p>
-        <p className="text-xs text-gray-400 mt-0.5">
+        <p className="text-xs dark:text-gray-500 mt-0.5">
           {batch.notes ?? "No notes"} · {date}
         </p>
       </div>
       <div className="text-right shrink-0">
-        <p className="text-sm font-bold text-gray-900">
+        <p className="text-sm font-bold dark:text-white dark:text-white">
           {batch._count.bottles.toLocaleString()}
         </p>
-        <p className="text-xs text-gray-400">bottles</p>
+        <p className="text-xs dark:text-gray-500">bottles</p>
       </div>
     </a>
   )

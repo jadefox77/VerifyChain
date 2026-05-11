@@ -45,8 +45,8 @@ export default async function FraudPage() {
   return (
     <div>
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900">Fraud Alerts</h2>
-        <p className="text-gray-500 text-sm mt-1">
+        <h2 className="text-2xl font-bold dark:text-white dark:text-white">Fraud Alerts</h2>
+        <p className="dark:dark:text-gray-500 text-sm mt-1">
           All verification events flagged as suspicious.
         </p>
       </div>
@@ -73,10 +73,10 @@ export default async function FraudPage() {
 
       {/* Fraud log list */}
       {fraudLogs.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-12 text-center">
+        <div className="dark:bg-gray-900 dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 p-12 text-center">
           <p className="text-2xl mb-2">✅</p>
-          <p className="text-gray-500 text-sm font-medium">No fraud detected</p>
-          <p className="text-gray-400 text-xs mt-1">
+          <p className="dark:dark:text-gray-500 text-sm font-medium">No fraud detected</p>
+          <p className="dark:text-gray-500 text-xs mt-1">
             All scans are looking clean.
           </p>
         </div>
@@ -136,7 +136,7 @@ function FraudCard({ log }: { log: FraudLog }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden">
+    <div className="dark:bg-gray-900 dark:bg-gray-900 rounded-xl border border-red-200 shadow-sm overflow-hidden">
       <div className="px-5 py-3 bg-red-50 border-b border-red-200 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm">🚨</span>
@@ -151,28 +151,28 @@ function FraudCard({ log }: { log: FraudLog }) {
 
       <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4">
         <div>
-          <p className="text-xs text-gray-400 mb-1">Reason</p>
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-xs dark:text-gray-500 mb-1">Reason</p>
+          <p className="text-sm font-medium dark:text-white dark:text-white">
             {log.flagReason ?? "Duplicate scan"}
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-400 mb-1">Scan number</p>
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-xs dark:text-gray-500 mb-1">Scan number</p>
+          <p className="text-sm font-medium dark:text-white dark:text-white">
             #{log.scanCount}
           </p>
         </div>
         {distanceKm !== null && (
           <div>
-            <p className="text-xs text-gray-400 mb-1">Distance from first scan</p>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-xs dark:text-gray-500 mb-1">Distance from first scan</p>
+            <p className="text-sm font-medium dark:text-white dark:text-white">
               {distanceKm.toLocaleString()} km
             </p>
           </div>
         )}
         <div>
-          <p className="text-xs text-gray-400 mb-1">Flagged at</p>
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-xs dark:text-gray-500 mb-1">Flagged at</p>
+          <p className="text-sm font-medium dark:text-white dark:text-white">
             {new Date(currentScanTime).toLocaleDateString("en-NG", {
               day: "numeric",
               month: "short",
@@ -185,8 +185,8 @@ function FraudCard({ log }: { log: FraudLog }) {
       </div>
 
       {firstScanTime && (
-        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
+        <div className="px-5 py-3 dark:bg-gray-950 border-t border-gray-100">
+          <p className="text-xs dark:text-gray-500">
             First opened:{" "}
             <span className="text-gray-600 font-medium">
               {new Date(firstScanTime).toLocaleString("en-NG", {

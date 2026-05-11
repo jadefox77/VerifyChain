@@ -20,8 +20,8 @@ export default async function ProductsPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Products</h2>
-          <p className="text-gray-500 text-sm mt-1">
+          <h2 className="text-2xl font-bold dark:text-white dark:text-white">Products</h2>
+          <p className="dark:dark:text-gray-500 text-sm mt-1">
             Manage your product lines. Each batch is tied to a product.
           </p>
         </div>
@@ -29,8 +29,8 @@ export default async function ProductsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Create product form */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-5">
+        <div className="dark:bg-gray-900 dark:bg-gray-900 rounded-2xl border dark:border-gray-800 dark:border-gray-800 shadow-sm p-6">
+          <h3 className="text-base font-semibold dark:text-white dark:text-white mb-5">
             Add New Product
           </h3>
           <form action={createProduct} className="flex flex-col gap-4">
@@ -44,7 +44,7 @@ export default async function ProductsPage() {
                 type="text"
                 required
                 placeholder="e.g. Malta Gold 60cl"
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
+                className="w-full rounded-lg border border-gray-300 dark:bg-gray-900 dark:bg-gray-900 px-4 py-2.5 text-sm dark:text-white dark:text-white placeholder:dark:text-gray-500 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
               />
             </div>
 
@@ -56,7 +56,7 @@ export default async function ProductsPage() {
                 id="category"
                 name="category"
                 required
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
+                className="w-full rounded-lg border border-gray-300 dark:bg-gray-900 dark:bg-gray-900 px-4 py-2.5 text-sm dark:text-white dark:text-white shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
               >
                 <option value="">Select a category</option>
                 <option value="Beer">Beer</option>
@@ -71,14 +71,14 @@ export default async function ProductsPage() {
             <div className="flex flex-col gap-1.5">
               <label htmlFor="description" className="text-sm font-medium text-gray-700">
                 Description{" "}
-                <span className="text-gray-400 font-normal">(optional)</span>
+                <span className="dark:text-gray-500 font-normal">(optional)</span>
               </label>
               <textarea
                 id="description"
                 name="description"
                 rows={3}
                 placeholder="Brief description of the product"
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1 resize-none"
+                className="w-full rounded-lg border border-gray-300 dark:bg-gray-900 dark:bg-gray-900 px-4 py-2.5 text-sm dark:text-white dark:text-white placeholder:dark:text-gray-500 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1 resize-none"
               />
             </div>
 
@@ -94,23 +94,23 @@ export default async function ProductsPage() {
         {/* Product list */}
         <div className="flex flex-col gap-3">
           {products.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-8 text-center">
-              <p className="text-gray-400 text-sm">No products yet. Add your first one.</p>
+            <div className="dark:bg-gray-900 dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 p-8 text-center">
+              <p className="dark:text-gray-500 text-sm">No products yet. Add your first one.</p>
             </div>
           ) : (
             products.map((product) => (
               <div
                 key={product.id}
-                className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 flex items-start justify-between gap-4"
+                className="dark:bg-gray-900 dark:bg-gray-900 rounded-xl border dark:border-gray-800 dark:border-gray-800 shadow-sm px-5 py-4 flex items-start justify-between gap-4"
               >
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">{product.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{product.category}</p>
+                  <p className="text-sm font-semibold dark:text-white dark:text-white">{product.name}</p>
+                  <p className="text-xs dark:text-gray-500 mt-0.5">{product.category}</p>
                   {product.description && (
-                    <p className="text-xs text-gray-500 mt-1">{product.description}</p>
+                    <p className="text-xs dark:dark:text-gray-500 mt-1">{product.description}</p>
                   )}
                 </div>
-                <span className="shrink-0 text-xs bg-gray-100 text-gray-600 rounded-full px-2.5 py-1 font-medium">
+                <span className="shrink-0 text-xs dark:bg-gray-800 text-gray-600 rounded-full px-2.5 py-1 font-medium">
                   {product.category}
                 </span>
               </div>

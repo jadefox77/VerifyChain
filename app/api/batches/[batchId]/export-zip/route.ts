@@ -63,8 +63,8 @@ export async function GET(
   const csv = csvRows.map((r) => r.join(",")).join("\n")
   folder.file("serials.csv", csv)
 
-  const zipBuffer = await zip.generateAsync({ type: "uint8array" })
-const blob = new Blob([zipBuffer], { type: "application/zip" })
+ const zipBuffer = await zip.generateAsync({ type: "uint8array" })
+const blob = new Blob([zipBuffer.buffer as ArrayBuffer], { type: "application/zip" })
 
 return new NextResponse(blob, {
     headers: {

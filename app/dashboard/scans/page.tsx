@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { formatSerialId } from "@/lib/serial"
+import { BottleStatus } from "@prisma/client"
 
 const ITEMS_PER_PAGE = 20
 
@@ -22,9 +23,11 @@ export default async function ScansPage({
   const currentPage = parseInt(page ?? "1", 10)
   const skip = (currentPage - 1) * ITEMS_PER_PAGE
 
-  const statusFilter = status === "FLAGGED" || status === "OPENED" || status === "MINT"
-    ? status
-    : undefined
+  const validStatuses: BottleStatus[] = ["FLAGGED", "OPENED", "MINT"]
+  const statusFilter =
+    status && validStatuses.includes(status as BottleStatus)
+      ? (status as BottleStatus)
+      : undefined
 
   const where = {
     bottle: {

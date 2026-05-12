@@ -146,6 +146,7 @@ export default async function ScansPage({
                   )}
                   <span className="text-xs text-gray-400 dark:text-gray-500">
                     {new Date(log.createdAt).toLocaleDateString("en-NG", {
+                      timeZone: "Africa/Lagos",
                       day: "numeric",
                       month: "short",
                       hour: "2-digit",

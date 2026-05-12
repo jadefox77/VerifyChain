@@ -59,6 +59,7 @@ export default async function BatchDetailPage({
           <p className="text-gray-500 text-sm mt-1">
             {batch.notes ?? "No notes"} ·{" "}
             {new Date(batch.createdAt).toLocaleDateString("en-NG", {
+              timeZone: "Africa/Lagos",
               day: "numeric",
               month: "long",
               year: "numeric",

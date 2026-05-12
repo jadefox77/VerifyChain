@@ -176,6 +176,7 @@ function FraudCard({ log }: { log: FraudLog }) {
           <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Flagged at</p>
           <p className="text-sm font-medium text-gray-900 dark:text-white">
             {new Date(currentScanTime).toLocaleDateString("en-NG", {
+              timeZone: "Africa/Lagos",
               day: "numeric",
               month: "short",
               year: "numeric",
@@ -192,6 +193,7 @@ function FraudCard({ log }: { log: FraudLog }) {
             First opened:{" "}
             <span className="text-gray-600 dark:text-gray-300 font-medium">
               {new Date(firstScanTime).toLocaleString("en-NG", {
+                timeZone: "Africa/Lagos",
                 day: "numeric",
                 month: "short",
                 year: "numeric",

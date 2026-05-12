@@ -15,98 +15,70 @@ export default async function VerifyPage({
 
   const result = signatureValid
     ? await verifyBottle({ serialId })
-    : { status: "NOT_FOUND" as const, message: "Invalid or tampered QR code. This product may be counterfeit." }
+    : {
+        status: "NOT_FOUND" as const,
+        message: "Invalid or tampered QR code. This product may be counterfeit.",
+      }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <main className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
+
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-10 h-10 bg-gray-900 rounded-xl mb-3">
-            <span className="text-white text-lg font-bold">V</span>
+          <div className="inline-flex items-center justify-center w-10 h-10 bg-gray-900 dark:bg-white rounded-xl mb-3">
+            <span className="text-white dark:text-gray-900 text-lg font-bold">V</span>
           </div>
-          <p className="text-sm text-gray-500">VerifyChain Africa</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">VerifyChain Africa</p>
         </div>
 
-        <div className={`rounded-2xl border shadow-sm p-8 text-center ${
-          result.status === "GENUINE"
-            ? "bg-green-50 border-green-200"
-            : result.status === "WARNING"
-            ? "bg-amber-50 border-amber-200"
-            : result.status === "FLAGGED"
-            ? "bg-red-50 border-red-200"
-            : "bg-gray-50 border-gray-200"
-        }`}>
-          <div className="text-5xl mb-4">
-            {result.status === "GENUINE" && "✅"}
-            {result.status === "WARNING" && "⚠️"}
-            {result.status === "FLAGGED" && "🚨"}
-            {result.status === "NOT_FOUND" && "❌"}
-          </div>
-
-          <h1 className={`text-xl font-bold mb-2 ${
-            result.status === "GENUINE"
-              ? "text-green-800"
-              : result.status === "WARNING"
-              ? "text-amber-800"
-              : result.status === "FLAGGED"
-              ? "text-red-800"
-              : "text-gray-800"
-          }`}>
-            {result.status === "GENUINE" && "Genuine Product"}
-            {result.status === "WARNING" && "Already Opened"}
-            {result.status === "FLAGGED" && "Fraud Alert"}
-            {result.status === "NOT_FOUND" && "Not Found"}
-          </h1>
-
-          <p className={`text-sm leading-relaxed ${
-            result.status === "GENUINE"
-              ? "text-green-700"
-              : result.status === "WARNING"
-              ? "text-amber-700"
-              : result.status === "FLAGGED"
-              ? "text-red-700"
-              : "text-gray-600"
-          }`}>
-            {result.message}
-          </p>
-
-          {result.status !== "GENUINE" && result.status !== "NOT_FOUND" && (
-            <div className={`mt-6 rounded-xl p-4 text-left text-xs space-y-2 ${
-              result.status === "WARNING"
-                ? "bg-amber-100 text-amber-800"
-                : "bg-red-100 text-red-800"
-            }`}>
-              <div className="flex justify-between">
-                <span className="font-medium">First scanned</span>
-                <span>
-                  {new Date(result.firstScan).toLocaleString("en-NG", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-              {result.firstLocation && (
-                <div className="flex justify-between">
-                  <span className="font-medium">First location</span>
-                  <span>{result.firstLocation}</span>
+        {result.status === "PROMPT_CAP" && (
+          <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-2xl p-8 text-center">
+            <div className="text-5xl mb-4">🔍</div>
+            <h1 className="text-xl font-bold text-blue-900 dark:text-blue-200 mb-2">
+              Step 1 Complete
+            </h1>
+            <p className="text-blue-700 dark:text-blue-300 text-sm leading-relaxed mb-6">
+              Bottle identity confirmed for{" "}
+              <strong>{result.productName}</strong>.
+            </p>
+            <div className="bg-blue-100 dark:bg-blue-900 rounded-xl p-4 text-left space-y-3">
+              <p className="text-xs font-semibold text-blue-800 dark:text-blue-200 uppercase tracking-wide">
+                Step 2 — Complete verification
+              </p>
+              <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-2 list-decimal list-inside">
+                <li>Open the bottle</li>
+                <li>Look inside the cap for a hidden QR code</li>
+                <li>Scan that QR code to confirm authenticity</li>
+              </ol>
+              {result.topCode && (
+                <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    Top-cap code for reference:{" "}
+                    <span className="font-mono font-bold tracking-widest">
+                      {result.topCode}
+                    </span>
+                  </p>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span className="font-medium">Serial</span>
-                <span className="font-mono">{serialId}</span>
-              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {result.status === "GENUINE" && (
-            <div className="mt-6 rounded-xl bg-green-100 p-4 text-left text-xs space-y-2 text-green-800">
+        {result.status === "ALREADY_OPENED" && (
+          <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-2xl p-8 text-center">
+            <div className="text-5xl mb-4">⚠️</div>
+            <h1 className="text-xl font-bold text-amber-900 dark:text-amber-200 mb-2">
+              Already Opened
+            </h1>
+            <p className="text-amber-700 dark:text-amber-300 text-sm leading-relaxed">
+              {result.message}
+            </p>
+            <div className="mt-6 bg-amber-100 dark:bg-amber-900 rounded-xl p-4 text-left text-xs text-amber-800 dark:text-amber-300">
               <div className="flex justify-between">
-                <span className="font-medium">Verified at</span>
+                <span className="font-medium">First verified</span>
                 <span>
                   {new Date(result.firstScan).toLocaleString("en-NG", {
+                    timeZone: "Africa/Lagos",
                     day: "numeric",
                     month: "short",
                     year: "numeric",
@@ -115,15 +87,35 @@ export default async function VerifyPage({
                   })}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Serial</span>
-                <span className="font-mono">{serialId}</span>
-              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <p className="text-center text-xs text-gray-400 mt-6">
+        {result.status === "FLAGGED" && (
+          <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl p-8 text-center">
+            <div className="text-5xl mb-4">🚨</div>
+            <h1 className="text-xl font-bold text-red-900 dark:text-red-200 mb-2">
+              Fraud Alert
+            </h1>
+            <p className="text-red-700 dark:text-red-300 text-sm leading-relaxed">
+              {result.message}
+            </p>
+          </div>
+        )}
+
+        {result.status === "NOT_FOUND" && (
+          <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 text-center">
+            <div className="text-5xl mb-4">❌</div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+              Not Found
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+              {result.message}
+            </p>
+          </div>
+        )}
+
+        <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-6">
           Powered by VerifyChain Africa
         </p>
       </div>

@@ -43,6 +43,7 @@ export function buildWarningMessage(
   serialId: string
 ): string {
   const time = firstScannedAt.toLocaleString("en-NG", {
+    timeZone: "Africa/Lagos",
     day: "numeric",
     month: "short",
     year: "numeric",

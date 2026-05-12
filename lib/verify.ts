@@ -98,16 +98,17 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
 
   // Write the scan log
   await prisma.scanLog.create({
-    data: {
-      bottleId: bottle.id,
-      phoneHash: phoneHash ?? null,
-      lat: lat ?? null,
-      lng: lng ?? null,
-      scanCount,
-      fraudFlag,
-      flagReason,
-    },
-  })
+  data: {
+    bottleId: bottle.id,
+    phoneHash: phoneHash ?? null,
+    lat: lat ?? null,
+    lng: lng ?? null,
+    scanCount,
+    fraudFlag,
+    flagReason,
+    scanLayer: "BOTTLE",
+  },
+})
 
   // Update bottle status
   if (bottle.status === "MINT") {

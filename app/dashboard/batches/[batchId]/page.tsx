@@ -18,16 +18,17 @@ export default async function BatchDetailPage({
   if (!manufacturer) redirect("/onboarding")
 
   const batch = await prisma.batch.findFirst({
-    where: { id: batchId, manufacturerId: manufacturer.id },
-    include: {
-      product: true,
-      bottles: {
-        take: 50,
-        orderBy: { createdAt: "asc" },
-      },
-      _count: { select: { bottles: true } },
+  where: { id: batchId, manufacturerId: manufacturer.id },
+  include: {
+    product: true,
+    bottles: {
+      take: 50,
+      orderBy: { createdAt: "asc" },
+      include: { cap: true },
     },
-  })
+    _count: { select: { bottles: true } },
+  },
+})
 
   if (!batch) redirect("/dashboard/batches")
 
@@ -101,38 +102,52 @@ export default async function BatchDetailPage({
       </div>
 
       {/* Serial preview */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">
-            Serial IDs{" "}
-            <span className="text-gray-400 font-normal">
-              (showing first 50 of {batch._count.bottles.toLocaleString()})
-            </span>
-          </h3>
-        </div>
+     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+  <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+      Identity Preview{" "}
+      <span className="text-gray-400 font-normal">
+        (showing first 50 of {batch._count.bottles.toLocaleString()})
+      </span>
+    </h3>
+  </div>
 
-        <div className="divide-y divide-gray-100">
-          {batch.bottles.map((bottle) => (
-            <div
-              key={bottle.id}
-              className="px-6 py-3 flex items-center justify-between gap-4"
-            >
-              <span className="font-mono text-sm text-gray-900 tracking-widest">
-                {formatSerialId(bottle.serialId)}
-              </span>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                bottle.status === "MINT"
-                  ? "bg-green-50 text-green-700"
-                  : bottle.status === "OPENED"
-                  ? "bg-blue-50 text-blue-700"
-                  : "bg-red-50 text-red-700"
-              }`}>
-                {bottle.status}
-              </span>
-            </div>
-          ))}
-        </div>
+  {/* Header */}
+  <div className="hidden md:grid grid-cols-4 gap-4 px-6 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800">
+    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Bottle QR</p>
+    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Top-Cap Code</p>
+    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Hidden Cap QR</p>
+    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Status</p>
+  </div>
+
+  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+    {batch.bottles.map((bottle) => (
+      <div
+        key={bottle.id}
+        className="px-6 py-3 grid grid-cols-1 md:grid-cols-4 gap-2 md:gap-4 items-center"
+      >
+        <span className="font-mono text-xs text-gray-900 dark:text-white">
+          {formatSerialId(bottle.serialId)}
+        </span>
+        <span className="font-mono text-xs text-blue-600 dark:text-blue-400 font-bold tracking-widest">
+          {bottle.cap ? formatSerialId(bottle.cap.topCode) : "—"}
+        </span>
+        <span className="font-mono text-xs text-gray-400 dark:text-gray-500 truncate">
+          {bottle.cap ? bottle.cap.hiddenSerialId.slice(0, 12) + "..." : "—"}
+        </span>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full w-fit ${
+          bottle.status === "MINT"
+            ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400"
+            : bottle.status === "OPENED"
+            ? "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-400"
+            : "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400"
+        }`}>
+          {bottle.status}
+        </span>
       </div>
+    ))}
+  </div>
+</div> 
     </div>
   )
 }

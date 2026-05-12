@@ -2,7 +2,11 @@
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { generateSerialId } from "@/lib/serial"
+import {
+  generateSerialId,
+  generateTopCapCode,
+  generateHiddenSerialId,
+} from "@/lib/serial"
 import { redirect } from "next/navigation"
 
 export async function generateBatch(formData: FormData) {
@@ -17,6 +21,7 @@ export async function generateBatch(formData: FormData) {
   const productId = formData.get("productId") as string
   const quantity = parseInt(formData.get("quantity") as string, 10)
   const notes = formData.get("notes") as string
+  const targetRegion = formData.get("targetRegion") as string
 
   if (!productId || isNaN(quantity) || quantity < 1 || quantity > 5000) return
 
@@ -25,21 +30,40 @@ export async function generateBatch(formData: FormData) {
   })
   if (!product) return
 
+  // Create the batch
   const batch = await prisma.batch.create({
     data: {
       manufacturerId: manufacturer.id,
       productId,
       quantity,
       notes: notes || null,
+      targetRegion: targetRegion || null,
     },
   })
 
-  const bottles = Array.from({ length: quantity }, () => ({
+  // Generate bottles and caps together
+  const bottlesData = Array.from({ length: quantity }, () => ({
     serialId: generateSerialId(),
     batchId: batch.id,
   }))
 
-  await prisma.bottle.createMany({ data: bottles })
+  // Create all bottles first
+  await prisma.bottle.createMany({ data: bottlesData })
+
+  // Fetch the created bottles to get their IDs
+  const bottles = await prisma.bottle.findMany({
+    where: { batchId: batch.id },
+    select: { id: true },
+  })
+
+  // Create a cap for every bottle
+  const capsData = bottles.map((bottle) => ({
+    bottleId: bottle.id,
+    topCode: generateTopCapCode(),
+    hiddenSerialId: generateHiddenSerialId(),
+  }))
+
+  await prisma.cap.createMany({ data: capsData })
 
   redirect(`/dashboard/batches/${batch.id}`)
 }

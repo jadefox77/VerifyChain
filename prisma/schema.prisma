@@ -102,6 +102,7 @@ model Batch {
   productId      String
   quantity       Int
   notes          String?
+  targetRegion   String?
 
   manufacturer Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
   product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -116,12 +117,33 @@ model Bottle {
   batchId   String
   status    BottleStatus @default(MINT)
 
+  // First scan metadata
   firstScannedAt  DateTime?
   firstScannedLat Float?
   firstScannedLng Float?
   firstPhoneHash  String?
 
-  batch    Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch    Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  cap      Cap?
+  scanLogs ScanLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Cap {
+  id        String    @id @default(cuid())
+  bottleId  String    @unique
+  topCode   String    @unique
+  hiddenSerialId String @unique
+  status    CapStatus @default(SEALED)
+
+  firstOpenedAt  DateTime?
+  firstOpenedLat Float?
+  firstOpenedLng Float?
+  firstPhoneHash String?
+
+  bottle   Bottle    @relation(fields: [bottleId], references: [id], onDelete: Cascade)
   scanLogs ScanLog[]
 
   createdAt DateTime @default(now())
@@ -129,18 +151,21 @@ model Bottle {
 }
 
 model ScanLog {
-  id         String    @id @default(cuid())
-  bottleId   String
-  phoneHash  String?
-  lat        Float?
-  lng        Float?
-  city       String?
-  country    String?
-  scanCount  Int
-  fraudFlag  Boolean   @default(false)
+  id        String      @id @default(cuid())
+  bottleId  String?
+  capId     String?
+  phoneHash String?
+  lat       Float?
+  lng       Float?
+  city      String?
+  country   String?
+  scanCount Int
+  scanLayer ScanLayer
+  fraudFlag Boolean     @default(false)
   flagReason String?
 
-  bottle Bottle @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+  bottle Bottle? @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+  cap    Cap?    @relation(fields: [capId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 }
@@ -149,4 +174,15 @@ enum BottleStatus {
   MINT
   OPENED
   FLAGGED
+}
+
+enum CapStatus {
+  SEALED
+  OPENED
+  FLAGGED
+}
+
+enum ScanLayer {
+  BOTTLE
+  CAP
 }

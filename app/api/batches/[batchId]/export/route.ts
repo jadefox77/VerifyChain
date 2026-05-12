@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { formatSerialId, buildVerifyUrl } from "@/lib/serial"
 import { NextRequest, NextResponse } from "next/server"
+import { formatSerialId, buildVerifyUrl, buildCapVerifyUrl } from "@/lib/serial"
+
 
 export async function GET(
   req: NextRequest,
@@ -21,27 +23,31 @@ export async function GET(
   }
 
   const batch = await prisma.batch.findFirst({
-    where: { id: batchId, manufacturerId: manufacturer.id },
-    include: {
-      product: true,
-      bottles: { orderBy: { createdAt: "asc" } },
+  where: { id: batchId, manufacturerId: manufacturer.id },
+  include: {
+    product: true,
+    bottles: {
+      orderBy: { createdAt: "asc" },
+      include: { cap: true },
     },
-  })
+  },
+})
 
   if (!batch) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
   const rows = [
-    ["Serial ID", "Formatted", "QR URL", "Status", "Created At"],
-    ...batch.bottles.map((b) => [
-      b.serialId,
-      formatSerialId(b.serialId),
-      buildVerifyUrl(b.serialId),
-      b.status,
-      b.createdAt.toISOString(),
-    ]),
-  ]
+  ["Bottle Serial", "Bottle QR URL", "Top Cap Code", "Hidden Cap Serial", "Hidden Cap QR URL", "Status"],
+  ...batch.bottles.map((b) => [
+    b.serialId,
+    buildVerifyUrl(b.serialId),
+    b.cap?.topCode ?? "",
+    b.cap?.hiddenSerialId ?? "",
+    b.cap ? buildCapVerifyUrl(b.cap.hiddenSerialId) : "",
+    b.status,
+  ]),
+]
 
   const csv = rows.map((r) => r.join(",")).join("\n")
 

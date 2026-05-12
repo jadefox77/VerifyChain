@@ -137,6 +137,30 @@ function GenerateForm({ products }: { products: Product[] }) {
           className="w-full rounded-lg border border-gray-300 dark:bg-gray-900 dark:bg-gray-900 px-4 py-2.5 text-sm dark:text-white dark:text-white placeholder:dark:text-gray-500 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
         />
       </div>
+    
+    <div className="flex flex-col gap-1.5">
+  <label htmlFor="targetRegion" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+    Target Region{" "}
+    <span className="text-gray-400 font-normal">(optional)</span>
+  </label>
+  <select
+    id="targetRegion"
+    name="targetRegion"
+    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
+  >
+    <option value="">Select a region</option>
+    <option value="Lagos">Lagos</option>
+    <option value="Abuja">Abuja</option>
+    <option value="Kano">Kano</option>
+    <option value="Rivers">Rivers</option>
+    <option value="Oyo">Oyo</option>
+    <option value="Edo">Edo</option>
+    <option value="Anambra">Anambra</option>
+    <option value="Kaduna">Kaduna</option>
+    <option value="Delta">Delta</option>
+    <option value="Other">Other</option>
+  </select>
+</div>
 
       <button
         type="submit"

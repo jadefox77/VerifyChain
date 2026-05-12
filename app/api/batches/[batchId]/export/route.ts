@@ -1,9 +1,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { formatSerialId, buildVerifyUrl } from "@/lib/serial"
-import { NextRequest, NextResponse } from "next/server"
 import { formatSerialId, buildVerifyUrl, buildCapVerifyUrl } from "@/lib/serial"
-
+import { NextRequest, NextResponse } from "next/server"
 
 export async function GET(
   req: NextRequest,

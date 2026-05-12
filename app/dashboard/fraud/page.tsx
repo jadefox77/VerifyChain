@@ -107,10 +107,12 @@ type FraudLog = {
       product: { name: string }
     }
     scanLogs: { createdAt: Date }[]
-  }
+  } | null
 }
 
 function FraudCard({ log }: { log: FraudLog }) {
+  if (!log.bottle) return null
+
   const firstScanTime = log.bottle.firstScannedAt
   const currentScanTime = log.createdAt
 
@@ -136,43 +138,43 @@ function FraudCard({ log }: { log: FraudLog }) {
   }
 
   return (
-    <div className="dark:bg-gray-900 dark:bg-gray-900 rounded-xl border border-red-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-3 bg-red-50 border-b border-red-200 flex items-center justify-between gap-4">
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-red-200 dark:border-red-900 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-900 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm">🚨</span>
-          <p className="text-sm font-semibold text-red-800">
+          <p className="text-sm font-semibold text-red-800 dark:text-red-300">
             {log.bottle.batch.product.name}
           </p>
         </div>
-        <span className="font-mono text-xs text-red-600">
+        <span className="font-mono text-xs text-red-600 dark:text-red-400">
           {formatSerialId(log.bottle.serialId)}
         </span>
       </div>
 
       <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4">
         <div>
-          <p className="text-xs dark:text-gray-500 mb-1">Reason</p>
-          <p className="text-sm font-medium dark:text-white dark:text-white">
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Reason</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
             {log.flagReason ?? "Duplicate scan"}
           </p>
         </div>
         <div>
-          <p className="text-xs dark:text-gray-500 mb-1">Scan number</p>
-          <p className="text-sm font-medium dark:text-white dark:text-white">
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Scan number</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
             #{log.scanCount}
           </p>
         </div>
         {distanceKm !== null && (
           <div>
-            <p className="text-xs dark:text-gray-500 mb-1">Distance from first scan</p>
-            <p className="text-sm font-medium dark:text-white dark:text-white">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Distance from first scan</p>
+            <p className="text-sm font-medium text-gray-900 dark:text-white">
               {distanceKm.toLocaleString()} km
             </p>
           </div>
         )}
         <div>
-          <p className="text-xs dark:text-gray-500 mb-1">Flagged at</p>
-          <p className="text-sm font-medium dark:text-white dark:text-white">
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Flagged at</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
             {new Date(currentScanTime).toLocaleDateString("en-NG", {
               day: "numeric",
               month: "short",
@@ -185,10 +187,10 @@ function FraudCard({ log }: { log: FraudLog }) {
       </div>
 
       {firstScanTime && (
-        <div className="px-5 py-3 dark:bg-gray-950 border-t border-gray-100">
-          <p className="text-xs dark:text-gray-500">
+        <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
             First opened:{" "}
-            <span className="text-gray-600 font-medium">
+            <span className="text-gray-600 dark:text-gray-300 font-medium">
               {new Date(firstScanTime).toLocaleString("en-NG", {
                 day: "numeric",
                 month: "short",

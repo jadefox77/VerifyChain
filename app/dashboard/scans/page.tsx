@@ -104,7 +104,9 @@ export default async function ScansPage({
           </div>
         ) : (
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {scanLogs.map((log) => (
+           {scanLogs.map((log) => {
+             if (!log.bottle) return null
+             return (
               <div key={log.id} className="px-4 md:px-6 py-4">
                 {/* Top row */}
                 <div className="flex items-start justify-between gap-3">
@@ -152,7 +154,8 @@ export default async function ScansPage({
                   </span>
                 </div>
               </div>
-            ))}
+            )
+            })}
           </div>
         )}
 

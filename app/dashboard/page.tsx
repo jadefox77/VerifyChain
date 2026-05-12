@@ -81,41 +81,44 @@ export default async function DashboardPage() {
     </div>
   ) : (
     <div className="divide-y divide-gray-100 dark:divide-gray-800">
-      {recentScans.map((log) => (
-        <div
-          key={log.id}
-          className="px-6 py-3 flex items-center justify-between gap-4"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <span className={`shrink-0 w-2 h-2 rounded-full ${
-              log.fraudFlag ? "bg-red-500" : "bg-green-400"
-            }`} />
-            <div className="min-w-0">
-              <p className="text-sm text-gray-900 dark:text-white truncate">
-                {log.bottle.batch.product.name}
-              </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
-                {formatSerialId(log.bottle.serialId)}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 shrink-0">
-            {log.fraudFlag && (
-              <span className="text-xs font-medium text-red-600 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded-full">
-                Fraud
-              </span>
-            )}
-            <p className="text-xs text-gray-400 dark:text-gray-500">
-              {new Date(log.createdAt).toLocaleDateString("en-NG", {
-                day: "numeric",
-                month: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </p>
-          </div>
+     {recentScans.map((log) => {
+  if (!log.bottle) return null
+  return (
+    <div
+      key={log.id}
+      className="px-6 py-3 flex items-center justify-between gap-4"
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <span className={`shrink-0 w-2 h-2 rounded-full ${
+          log.fraudFlag ? "bg-red-500" : "bg-green-400"
+        }`} />
+        <div className="min-w-0">
+          <p className="text-sm text-gray-900 dark:text-white truncate">
+            {log.bottle.batch.product.name}
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
+            {formatSerialId(log.bottle.serialId)}
+          </p>
         </div>
-      ))}
+      </div>
+      <div className="flex items-center gap-4 shrink-0">
+        {log.fraudFlag && (
+          <span className="text-xs font-medium text-red-600 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded-full">
+            Fraud
+          </span>
+        )}
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          {new Date(log.createdAt).toLocaleDateString("en-NG", {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </p>
+      </div>
+    </div>
+  )
+})} 
     </div>
   )}
 </div>

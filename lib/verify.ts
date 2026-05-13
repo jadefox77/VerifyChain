@@ -20,13 +20,10 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
     where: { serialId },
     include: {
       cap: true,
-      batch: {
-        include: { product: true },
-      },
+      batch: { include: { product: true } },
       scanLogs: {
         where: { scanLayer: "BOTTLE" },
-        orderBy: { createdAt: "desc" },
-        take: 1,
+        orderBy: { createdAt: "asc" },
       },
     },
   })
@@ -45,19 +42,39 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
     }
   }
 
-  // Log the bottle scan
+  const bottleScanCount = bottle.scanLogs.length + 1
+  const isDuplicate = bottle.scanLogs.length > 0
+
+  // If this bottle has been scanned at bottle layer before, flag it
+  const fraudFlag = isDuplicate
+  const flagReason = isDuplicate ? "Bottle QR scanned multiple times" : null
+
+  // Write the bottle scan log
   await prisma.scanLog.create({
     data: {
       bottleId: bottle.id,
       phoneHash: phoneHash ?? null,
       lat: lat ?? null,
       lng: lng ?? null,
-      scanCount: bottle.scanLogs.length + 1,
+      scanCount: bottleScanCount,
       scanLayer: "BOTTLE",
-      fraudFlag: false,
-      flagReason: null,
+      fraudFlag,
+      flagReason,
     },
   })
+
+  // If duplicate bottle scan, flag the bottle
+  if (fraudFlag && bottle.status !== "FLAGGED") {
+    await prisma.bottle.update({
+      where: { id: bottle.id },
+      data: { status: "FLAGGED" },
+    })
+
+    return {
+      status: "FLAGGED",
+      message: "This bottle QR has been scanned multiple times. Possible counterfeit detected. Do not consume.",
+    }
+  }
 
   if (bottle.status === "OPENED") {
     return {

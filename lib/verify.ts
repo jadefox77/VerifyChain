@@ -64,7 +64,7 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
   })
 
   // If duplicate bottle scan, flag the bottle
-  if (fraudFlag && bottle.status !== "FLAGGED") {
+  if (fraudFlag) {
     await prisma.bottle.update({
       where: { id: bottle.id },
       data: { status: "FLAGGED" },

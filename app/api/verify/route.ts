@@ -12,16 +12,16 @@ const schema = z.object({
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for") ?? "anonymous"
-  const { success } = await verifyRatelimit.limit(ip)
-
-  if (!success) {
-    return NextResponse.json(
-      { error: "Too many requests. Please slow down." },
-      { status: 429 }
-    )
-  }
 
   try {
+    const { success } = await verifyRatelimit.limit(ip)
+    if (!success) {
+      return NextResponse.json(
+        { error: "Too many requests. Please slow down." },
+        { status: 429 }
+      )
+    }
+
     const body = await req.json()
     const parsed = schema.safeParse(body)
 

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { formatSerialId, buildVerifyUrl } from "@/lib/serial"
+import { formatSerialId, buildVerifyUrl, buildCapVerifyUrl } from "@/lib/serial"
 import { NextRequest, NextResponse } from "next/server"
 import QRCode from "qrcode"
 import JSZip from "jszip"
@@ -26,7 +26,10 @@ export async function GET(
     where: { id: batchId, manufacturerId: manufacturer.id },
     include: {
       product: true,
-      bottles: { orderBy: { createdAt: "asc" } },
+      bottles: {
+        orderBy: { createdAt: "asc" },
+        include: { cap: true },
+      },
     },
   })
 
@@ -35,38 +38,66 @@ export async function GET(
   }
 
   const zip = new JSZip()
-  const folder = zip.folder(`batch-${batchId}`)!
 
-  // Generate a QR code PNG for every bottle
+  // Two folders — one for bottle label QRs, one for hidden cap QRs
+  const bottleFolder = zip.folder(`batch-${batchId}/bottle-qr`)!
+  const capFolder = zip.folder(`batch-${batchId}/cap-qr`)!
+
   for (const bottle of batch.bottles) {
-    const url = buildVerifyUrl(bottle.serialId)
-    const pngBuffer = await QRCode.toBuffer(url, {
+    // Bottle label QR
+    const bottleUrl = buildVerifyUrl(bottle.serialId)
+    const bottleQr = await QRCode.toBuffer(bottleUrl, {
       type: "png",
       width: 300,
       margin: 2,
       errorCorrectionLevel: "H",
     })
-    const fileName = `${formatSerialId(bottle.serialId)}.png`
-    folder.file(fileName, pngBuffer)
+    const bottleFileName = `${formatSerialId(bottle.serialId)}.png`
+    bottleFolder.file(bottleFileName, bottleQr)
+
+    // Hidden cap QR
+    if (bottle.cap) {
+      const capUrl = buildCapVerifyUrl(bottle.cap.hiddenSerialId)
+      const capQr = await QRCode.toBuffer(capUrl, {
+        type: "png",
+        width: 300,
+        margin: 2,
+        errorCorrectionLevel: "H",
+      })
+      // Named by top-cap code so printers can match them easily
+      const capFileName = `${formatSerialId(bottle.cap.topCode)}.png`
+      capFolder.file(capFileName, capQr)
+    }
   }
 
-  // Also include a CSV inside the ZIP for reference
+  // Reference CSV inside the ZIP
   const csvRows = [
-    ["Serial ID", "Formatted", "QR URL", "Status"],
+    [
+      "Bottle Serial",
+      "Bottle QR URL",
+      "Top Cap Code",
+      "Hidden Cap Serial",
+      "Hidden Cap QR URL",
+      "Status",
+    ],
     ...batch.bottles.map((b) => [
       b.serialId,
-      formatSerialId(b.serialId),
       buildVerifyUrl(b.serialId),
+      b.cap?.topCode ?? "",
+      b.cap?.hiddenSerialId ?? "",
+      b.cap ? buildCapVerifyUrl(b.cap.hiddenSerialId) : "",
       b.status,
     ]),
   ]
   const csv = csvRows.map((r) => r.join(",")).join("\n")
-  folder.file("serials.csv", csv)
+  zip.file(`batch-${batchId}/serials.csv`, csv)
 
- const zipBuffer = await zip.generateAsync({ type: "uint8array" })
-const blob = new Blob([zipBuffer.buffer as ArrayBuffer], { type: "application/zip" })
+  const zipBuffer = await zip.generateAsync({ type: "uint8array" })
+  const blob = new Blob([zipBuffer.buffer as ArrayBuffer], {
+    type: "application/zip",
+  })
 
-return new NextResponse(blob, {
+  return new NextResponse(blob, {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="batch-${batchId}.zip"`,

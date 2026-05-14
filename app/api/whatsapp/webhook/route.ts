@@ -8,11 +8,11 @@ import {
   buildWarningMessage,
   buildFlaggedMessage,
   buildNotFoundMessage,
+  buildCapAlreadyOpenedMessage,
+  buildAlreadyVerifiedMessage,
 } from "@/lib/whatsapp"
 import crypto from "crypto"
 
-// Store pending bottle scans per phone number
-// In production this should be Redis — for MVP an in-memory map works
 const pendingBottleScans = new Map<string, string>()
 
 export async function GET(req: NextRequest) {
@@ -40,27 +40,23 @@ export async function POST(req: NextRequest) {
     const from = message.from
     const messageType = message.type
 
-    let userLat: number | undefined
-let userLng: number | undefined
+    // Handle location share
+    if (messageType === "location") {
+      await sendMessage(
+        from,
+        "📍 Location received. Now send your bottle serial code or scan the QR code."
+      )
+      return NextResponse.json({ status: "location_stored" }, { status: 200 })
+    }
 
-if (messageType === "location") {
-  // Store location for this phone and ask them to now send the code
-  userLat = message.location?.latitude
-  userLng = message.location?.longitude
-  await sendMessage(
-    from,
-    "📍 Location received. Now send your bottle serial code or scan the QR code."
-  )
-  return NextResponse.json({ status: "location_stored" }, { status: 200 })
-}
-
-if (messageType !== "text") {
-  await sendMessage(
-    from,
-    "Please send the serial code printed on your bottle or scan the QR code with your camera."
-  )
-  return NextResponse.json({ status: "unsupported_type" }, { status: 200 })
-}
+    // Ignore non-text messages
+    if (messageType !== "text") {
+      await sendMessage(
+        from,
+        "Please send the serial code printed on your bottle or scan the QR code with your camera."
+      )
+      return NextResponse.json({ status: "unsupported_type" }, { status: 200 })
+    }
 
     const rawText = message.text?.body?.trim() ?? ""
     const code = rawText.replace(/[-\s]/g, "").toUpperCase()
@@ -78,10 +74,7 @@ if (messageType !== "text") {
       .update(from)
       .digest("hex")
 
-    // Check if this phone has a pending bottle scan waiting for cap scan
     const pendingBottleSerial = pendingBottleScans.get(from)
-
-    // Determine if this looks like a hidden cap code (16 chars) or bottle code (12 chars)
     const isCapCode = code.length === 16
     const isBottleCode = code.length === 12
 
@@ -118,14 +111,13 @@ if (messageType !== "text") {
       }
 
       await sendMessage(from, replyText)
+
     } else if (isBottleCode) {
       // Step 1 — bottle verification
       const result = await verifyBottle({ serialId: code, phoneHash })
 
       if (result.status === "PROMPT_CAP") {
-        // Store this bottle scan, waiting for cap
         pendingBottleScans.set(from, code)
-
         await sendMessage(
           from,
           [
@@ -138,56 +130,46 @@ if (messageType !== "text") {
             "2. Look inside the cap for a hidden QR code",
             "3. Scan that QR code or type the code here",
             "",
-            result.topCode
-              ? `Top-cap reference code: *${result.topCode}*`
-              : "",
+            result.topCode ? `Top-cap reference code: *${result.topCode}*` : "",
             "",
             "_VerifyChain Africa_",
           ]
             .filter(Boolean)
             .join("\n")
         )
-      } else if (result.status === "ALREADY_OPENED") {
-        await sendMessage(
-          from,
-          [
-            "⚠️ *ALREADY OPENED*",
-            "",
-            "This bottle was previously verified.",
-            `First opened: ${new Date(result.firstScan).toLocaleString("en-NG")}`,
-            "",
-            "Possible reuse or refill detected.",
-            "",
-            "_VerifyChain Africa_",
-          ].join("\n")
-        )
+      } else if (result.status === "CAP_ALREADY_OPENED") {
+        await sendMessage(from, buildCapAlreadyOpenedMessage(result.capOpenedAt, code))
+      } else if (result.status === "ALREADY_VERIFIED") {
+        await sendMessage(from, buildAlreadyVerifiedMessage(result.firstScan, code))
       } else if (result.status === "FLAGGED") {
         await sendMessage(from, buildFlaggedMessage("Previously flagged", code))
       } else {
         await sendMessage(from, buildNotFoundMessage(code))
       }
+
     } else {
-  // Unknown length — try cap first, then bottle
-  const capResult = await verifyCap({ hiddenSerialId: code, phoneHash })
-  if (capResult.status !== "NOT_FOUND") {
-    let replyText = ""
-    if (capResult.status === "GENUINE") {
-      replyText = buildGenuineMessage(capResult.productName, code)
-    } else if (capResult.status === "WARNING") {
-      replyText = buildWarningMessage(capResult.firstOpened, capResult.firstLocation, code)
-    } else if (capResult.status === "FLAGGED") {
-      replyText = buildFlaggedMessage(capResult.reason, code)
-    } else if (capResult.status === "MISMATCH") {
-      replyText = "🚨 Identity mismatch detected. Do not consume."
+      // Unknown code length — try cap lookup first, then give up
+      const result = await verifyCap({ hiddenSerialId: code, phoneHash })
+
+      if (result.status !== "NOT_FOUND") {
+        let replyText = ""
+        if (result.status === "GENUINE") {
+          replyText = buildGenuineMessage(result.productName, code)
+        } else if (result.status === "WARNING") {
+          replyText = buildWarningMessage(result.firstOpened, result.firstLocation, code)
+        } else if (result.status === "FLAGGED") {
+          replyText = buildFlaggedMessage(result.reason, code)
+        } else if (result.status === "MISMATCH") {
+          replyText = "🚨 Identity mismatch detected. Do not consume."
+        }
+        await sendMessage(from, replyText)
+      } else {
+        await sendMessage(
+          from,
+          "Code not recognised. Please scan the QR code on your bottle or inside the cap."
+        )
+      }
     }
-    await sendMessage(from, replyText)
-  } else {
-    await sendMessage(
-      from,
-      "Code not recognised. Please scan the QR code on your bottle or inside the cap."
-    )
-  }
-}
 
     return NextResponse.json({ status: "ok" }, { status: 200 })
   } catch (error) {

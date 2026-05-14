@@ -101,3 +101,51 @@ export function buildNotFoundMessage(serialId: string): string {
 }
 
 export { sendMessage }
+
+
+export function buildCapAlreadyOpenedMessage(
+  capOpenedAt: Date,
+  serialId: string
+): string {
+  return [
+    "🚨 *POSSIBLE REFILL DETECTED*",
+    "",
+    "The hidden cap inside this bottle was already opened before.",
+    `Cap first opened: ${capOpenedAt.toLocaleString("en-NG", {
+      timeZone: "Africa/Lagos",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`,
+    `Serial: ${serialId}`,
+    "",
+    "This bottle may have been refilled.",
+    "Do not consume.",
+    "",
+    "_Verified by VerifyChain Africa_",
+  ].join("\n")
+}
+
+export function buildAlreadyVerifiedMessage(
+  firstScan: Date,
+  serialId: string
+): string {
+  return [
+    "⚠️ *ALREADY VERIFIED*",
+    "",
+    "This bottle was previously opened and verified.",
+    `First verified: ${firstScan.toLocaleString("en-NG", {
+      timeZone: "Africa/Lagos",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`,
+    `Serial: ${serialId}`,
+    "",
+    "_Verified by VerifyChain Africa_",
+  ].join("\n")
+}

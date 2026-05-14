@@ -9,7 +9,8 @@ type VerifyInput = {
 
 type VerifyResult =
   | { status: "PROMPT_CAP"; message: string; productName: string; topCode: string }
-  | { status: "ALREADY_OPENED"; message: string; firstScan: Date }
+  | { status: "ALREADY_VERIFIED"; message: string; firstScan: Date }
+  | { status: "CAP_ALREADY_OPENED"; message: string; capOpenedAt: Date }
   | { status: "FLAGGED"; message: string }
   | { status: "NOT_FOUND"; message: string }
 
@@ -31,7 +32,7 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
   if (!bottle) {
     return {
       status: "NOT_FOUND",
-      message: "This code was not found. The product may be counterfeit.",
+      message: "This code was not found in our system. The product may be counterfeit.",
     }
   }
 
@@ -42,48 +43,79 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
     }
   }
 
-  const bottleScanCount = bottle.scanLogs.length + 1
-  const isDuplicate = bottle.scanLogs.length > 0
-
-  // If this bottle has been scanned at bottle layer before, flag it
-  const fraudFlag = isDuplicate
-  const flagReason = isDuplicate ? "Bottle QR scanned multiple times" : null
-
-  // Write the bottle scan log
+  // Log the bottle scan — no fraud flag, bottle QR scanning alone is not fraud
   await prisma.scanLog.create({
     data: {
       bottleId: bottle.id,
       phoneHash: phoneHash ?? null,
       lat: lat ?? null,
       lng: lng ?? null,
-      scanCount: bottleScanCount,
+      scanCount: bottle.scanLogs.length + 1,
       scanLayer: "BOTTLE",
-      fraudFlag,
-      flagReason,
+      fraudFlag: false,
+      flagReason: null,
     },
   })
 
-  // If duplicate bottle scan, flag the bottle
-  if (fraudFlag) {
+  // Cap has already been opened — this bottle may have been refilled
+  if (bottle.cap && bottle.cap.status === "OPENED") {
+    // Flag the bottle
     await prisma.bottle.update({
       where: { id: bottle.id },
       data: { status: "FLAGGED" },
     })
 
+    await prisma.cap.update({
+      where: { id: bottle.cap.id },
+      data: { status: "FLAGGED" },
+    })
+
+    // Write a fraud scan log
+    await prisma.scanLog.create({
+      data: {
+        bottleId: bottle.id,
+        phoneHash: phoneHash ?? null,
+        lat: lat ?? null,
+        lng: lng ?? null,
+        scanCount: bottle.scanLogs.length + 2,
+        scanLayer: "BOTTLE",
+        fraudFlag: true,
+        flagReason: "Cap already opened before bottle QR was scanned — possible refill",
+      },
+    })
+
     return {
-      status: "FLAGGED",
-      message: "This bottle QR has been scanned multiple times. Possible counterfeit detected. Do not consume.",
+      status: "CAP_ALREADY_OPENED",
+      message: `The hidden cap inside this bottle was already opened on ${bottle.cap.firstOpenedAt?.toLocaleDateString("en-NG", {
+        timeZone: "Africa/Lagos",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })}. This bottle may have been refilled. Do not consume.`,
+      capOpenedAt: bottle.cap.firstOpenedAt!,
     }
   }
 
+  // Cap has been flagged
+  if (bottle.cap && bottle.cap.status === "FLAGGED") {
+    return {
+      status: "FLAGGED",
+      message: "The cap associated with this bottle has been flagged for fraud. Do not consume.",
+    }
+  }
+
+  // Bottle already fully verified
   if (bottle.status === "OPENED") {
     return {
-      status: "ALREADY_OPENED",
-      message: "This bottle has already been opened and verified.",
+      status: "ALREADY_VERIFIED",
+      message: "This bottle has already been opened and fully verified.",
       firstScan: bottle.firstScannedAt!,
     }
   }
 
+  // Normal flow — prompt consumer to scan cap
   return {
     status: "PROMPT_CAP",
     message: `Bottle identity confirmed for ${bottle.batch.product.name}. Now open the bottle and scan the hidden QR code inside the cap to complete verification.`,

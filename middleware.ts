@@ -47,9 +47,8 @@ function redirectToSignIn(req: NextRequest): NextResponse {
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
-  // Public paths — skip all checks
+  // Fully public paths — no token needed
   const publicPaths = [
-    "/",
     "/login",
     "/unauthorized",
     "/verify",
@@ -63,19 +62,37 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Read role directly from JWT — no DB, no Prisma, edge-safe
- const token = await getToken({
-  req,
-  secret: process.env.NEXTAUTH_SECRET!,
-  cookieName: process.env.NODE_ENV === "production"
-    ? "__Secure-authjs.session-token"
-    : "authjs.session-token",
-})
-console.log("[middleware]", pathname, "token:", token ? "present" : "null", "role:", token?.role)
-  
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET!,
+    cookieName:
+      process.env.NODE_ENV === "production"
+        ? "__Secure-authjs.session-token"
+        : "authjs.session-token",
+  })
 
   const role = token?.role as UserRole | undefined
 
+  // Root path — redirect to correct home based on role
+  if (pathname === "/") {
+    if (!token) return NextResponse.next()
+
+    if (hasRole(role, ADMIN_ROLES)) {
+      const url = req.nextUrl.clone()
+      url.pathname = "/admin"
+      return NextResponse.redirect(url)
+    }
+
+    if (hasRole(role, MANUFACTURER_ROLES)) {
+      const url = req.nextUrl.clone()
+      url.pathname = "/dashboard"
+      return NextResponse.redirect(url)
+    }
+
+    return NextResponse.next()
+  }
+
+  // All remaining routes require authentication
   if (!token) {
     return redirectToSignIn(req)
   }

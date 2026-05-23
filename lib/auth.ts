@@ -84,6 +84,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       return true;
     },
+
+   
+  async redirect({ url, baseUrl }) {
+    // If it's a relative URL just use it
+    if (url.startsWith("/")) return `${baseUrl}${url}`
+    // If same origin use it
+    if (new URL(url).origin === baseUrl) return url
+    return baseUrl
+  },
   },
 
   pages: {

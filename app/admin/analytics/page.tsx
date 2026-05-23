@@ -37,7 +37,7 @@ async function getAnalyticsData() {
     whatsappScans,
     dailyScans,
     topRegions,
-    hourlyDistribution,
+    rawHourlyScans,
     manufacturerScanRanking,
   ] = await Promise.all([
     // Totals
@@ -103,15 +103,10 @@ async function getAnalyticsData() {
     }),
 
     // Hourly distribution — last 7 days
-    prisma.$queryRaw<{ hour: number; count: bigint }[]>`
-      SELECT
-        EXTRACT(HOUR FROM "scannedAt") AS hour,
-        COUNT(*) AS count
-      FROM "ScanLog"
-      WHERE "scannedAt" >= ${last7Days}
-      GROUP BY hour
-      ORDER BY hour ASC
-    `,
+prisma.scanLog.findMany({
+  where: { scannedAt: { gte: last7Days } },
+  select: { scannedAt: true },
+}),
 
     // Top manufacturers by scan volume
     prisma.manufacturer.findMany({
@@ -128,6 +123,19 @@ async function getAnalyticsData() {
     }),
   ])
 
+
+  // Compute hourly distribution from raw scan times
+const hourlyCounts = new Array(24).fill(0)
+rawHourlyScans.forEach(({ scannedAt }) => {
+  const hour = new Date(scannedAt).getHours()
+  hourlyCounts[hour]++
+})
+
+const hourlyDistribution = hourlyCounts.map((count, hour) => ({
+  hour,
+  count,
+}))
+
   return {
     totalScansAllTime,
     totalScansToday,
@@ -142,10 +150,7 @@ async function getAnalyticsData() {
     directScans: totalScansAllTime - whatsappScans,
     dailyScans,
     topRegions,
-    hourlyDistribution: hourlyDistribution.map((h) => ({
-      hour: Number(h.hour),
-      count: Number(h.count),
-    })),
+    hourlyDistribution,
     manufacturerScanRanking,
     overallFraudRate:
       totalScansAllTime > 0

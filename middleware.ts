@@ -68,6 +68,8 @@ export async function middleware(req: NextRequest) {
     req,
     secret: process.env.NEXTAUTH_SECRET!,
   })
+console.log("[middleware]", pathname, "token:", token ? "present" : "null", "role:", token?.role)
+  
 
   const role = token?.role as UserRole | undefined
 

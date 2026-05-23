@@ -24,117 +24,102 @@ async function getAnalyticsData() {
   const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-  const [
-    totalScansAllTime,
-    totalScansToday,
-    totalScansThisMonth,
-    genuineScans,
-    fraudScans,
-    firstOpenEvents,
-    repeatScans,
-    bottleLayerScans,
-    capLayerScans,
-    whatsappScans,
-    dailyScans,
-    topRegions,
-    rawHourlyScans,
-    manufacturerScanRanking,
-  ] = await Promise.all([
-    // Totals
-    prisma.scanLog.count(),
-    prisma.scanLog.count({ where: { scannedAt: { gte: today } } }),
-    prisma.scanLog.count({ where: { scannedAt: { gte: thisMonthStart } } }),
+  // ── Batch 1 — core totals ─────────────────────────────────────────────────
+  const totalScansAllTime = await prisma.scanLog.count()
+  const totalScansToday = await prisma.scanLog.count({
+    where: { scannedAt: { gte: today } },
+  })
+  const totalScansThisMonth = await prisma.scanLog.count({
+    where: { scannedAt: { gte: thisMonthStart } },
+  })
 
-    // Genuine vs fraud
-    prisma.scanLog.count({ where: { fraudFlag: false } }),
-    prisma.scanLog.count({ where: { fraudFlag: true } }),
+  // ── Batch 2 — scan type breakdown ─────────────────────────────────────────
+  const genuineScans = await prisma.scanLog.count({
+    where: { fraudFlag: false },
+  })
+  const fraudScans = await prisma.scanLog.count({
+    where: { fraudFlag: true },
+  })
+  const bottleLayerScans = await prisma.scanLog.count({
+    where: { scanLayer: "BOTTLE" },
+  })
+  const capLayerScans = await prisma.scanLog.count({
+    where: { scanLayer: "CAP" },
+  })
 
-    // First open events — cap layer scans that resulted in OPENED status
-    prisma.cap.count({ where: { status: "OPENED" } }),
+  // ── Batch 3 — engagement metrics ─────────────────────────────────────────
+  const firstOpenEvents = await prisma.cap.count({
+    where: { status: "OPENED" },
+  })
+  const whatsappScans = await prisma.scanLog.count({
+    where: { channel: "whatsapp" },
+  })
+  const repeatScans = await prisma.scanLog.count({
+    where: {
+      scanLayer: "BOTTLE",
+      fraudFlag: false,
+      bottle: { status: "OPENED" },
+    },
+  })
 
-    // Repeat scans — bottle scans where bottle was already OPENED
-    prisma.scanLog.count({
-      where: {
-        scanLayer: "BOTTLE",
-        fraudFlag: false,
-        bottle: { status: "OPENED" },
-      },
-    }),
+  // ── Batch 4 — grouped queries ─────────────────────────────────────────────
+  const topRegions = await prisma.scanLog.groupBy({
+    by: ["region"],
+    _count: true,
+    where: {
+      region: { not: null },
+      scannedAt: { gte: last30Days },
+    },
+    orderBy: { _count: { region: "desc" } },
+    take: 8,
+  })
 
-    // Layer breakdown
-    prisma.scanLog.count({ where: { scanLayer: "BOTTLE" } }),
-    prisma.scanLog.count({ where: { scanLayer: "CAP" } }),
+  const manufacturerScanRanking = await prisma.manufacturer.findMany({
+    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+    select: {
+      id: true,
+      companyName: true,
+      totalScans: true,
+      totalFraudFlags: true,
+      fraudRateCached: true,
+    },
+    orderBy: { totalScans: "desc" },
+    take: 8,
+  })
 
-    // WhatsApp vs direct
-    prisma.scanLog.count({ where: { channel: "whatsapp" } }),
+  // ── Batch 5 — hourly distribution (single query, compute in JS) ───────────
+  const rawHourlyScans = await prisma.scanLog.findMany({
+    where: { scannedAt: { gte: last7Days } },
+    select: { scannedAt: true },
+  })
 
-    // Daily scans — last 14 days
-    Promise.all(
-      Array.from({ length: 14 }, (_, i) => {
-        const day = new Date()
-        day.setDate(day.getDate() - (13 - i))
-        day.setHours(0, 0, 0, 0)
-        const next = new Date(day)
-        next.setDate(next.getDate() + 1)
-        return Promise.all([
-          prisma.scanLog.count({
-            where: { scannedAt: { gte: day, lt: next } },
-          }),
-          prisma.scanLog.count({
-            where: {
-              scannedAt: { gte: day, lt: next },
-              fraudFlag: true,
-            },
-          }),
-        ]).then(([total, fraud]) => ({ day, total, fraud }))
-      })
-    ),
+  const hourlyCounts = new Array(24).fill(0)
+  rawHourlyScans.forEach(({ scannedAt }) => {
+    const hour = new Date(scannedAt).getHours()
+    hourlyCounts[hour]++
+  })
+  const hourlyDistribution = hourlyCounts.map((count, hour) => ({
+    hour,
+    count,
+  }))
 
-    // Top regions by scan volume
-    prisma.scanLog.groupBy({
-      by: ["region"],
-      _count: true,
-      where: {
-        region: { not: null },
-        scannedAt: { gte: last30Days },
-      },
-      orderBy: { _count: { region: "desc" } },
-      take: 8,
-    }),
+  // ── Batch 6 — daily scans (sequential, not parallel) ─────────────────────
+  const dailyScans: { day: Date; total: number; fraud: number }[] = []
+  for (let i = 0; i < 14; i++) {
+    const day = new Date()
+    day.setDate(day.getDate() - (13 - i))
+    day.setHours(0, 0, 0, 0)
+    const next = new Date(day)
+    next.setDate(next.getDate() + 1)
 
-    // Hourly distribution — last 7 days
-prisma.scanLog.findMany({
-  where: { scannedAt: { gte: last7Days } },
-  select: { scannedAt: true },
-}),
-
-    // Top manufacturers by scan volume
-    prisma.manufacturer.findMany({
-      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-      select: {
-        id: true,
-        companyName: true,
-        totalScans: true,
-        totalFraudFlags: true,
-        fraudRateCached: true,
-      },
-      orderBy: { totalScans: "desc" },
-      take: 8,
-    }),
-  ])
-
-
-  // Compute hourly distribution from raw scan times
-const hourlyCounts = new Array(24).fill(0)
-rawHourlyScans.forEach(({ scannedAt }) => {
-  const hour = new Date(scannedAt).getHours()
-  hourlyCounts[hour]++
-})
-
-const hourlyDistribution = hourlyCounts.map((count, hour) => ({
-  hour,
-  count,
-}))
+    const total = await prisma.scanLog.count({
+      where: { scannedAt: { gte: day, lt: next } },
+    })
+    const fraud = await prisma.scanLog.count({
+      where: { scannedAt: { gte: day, lt: next }, fraudFlag: true },
+    })
+    dailyScans.push({ day, total, fraud })
+  }
 
   return {
     totalScansAllTime,
@@ -162,6 +147,7 @@ const hourlyDistribution = hourlyCounts.map((count, hour) => ({
         : "0.0",
   }
 }
+
 
 function formatHour(hour: number): string {
   if (hour === 0) return "12am"

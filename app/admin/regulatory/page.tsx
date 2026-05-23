@@ -17,188 +17,160 @@ async function getRegulatoryData() {
   const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const last90Days = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
 
-  const [
-    totalManufacturers,
-    activeManufacturers,
-    pendingManufacturers,
-    suspendedManufacturers,
-    totalBottlesAuthenticated,
-    totalFraudEvents,
-    criticalIncidents,
-    fraudByRegion,
-    suspiciousBatches,
-    manufacturerCompliance,
-    recentIncidents,
-    monthlyFraudTrend,
-  ] = await Promise.all([
-    // Manufacturer counts
-    prisma.manufacturer.count(),
+  // ── Manufacturer counts ───────────────────────────────────────────────────
+  const totalManufacturers = await prisma.manufacturer.count()
 
-    prisma.manufacturer.count({
-      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-    }),
+  const activeManufacturers = await prisma.manufacturer.count({
+    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+  })
 
-    prisma.manufacturer.count({
-      where: {
-        onboardingStatus: {
-          in: [
-            "PENDING_REVIEW",
-            "COMPLIANCE_VERIFICATION",
-            "TECHNICAL_INTEGRATION",
-            "PILOT_APPROVAL",
-          ],
+  const pendingManufacturers = await prisma.manufacturer.count({
+    where: {
+      onboardingStatus: {
+        in: [
+          "PENDING_REVIEW",
+          "COMPLIANCE_VERIFICATION",
+          "TECHNICAL_INTEGRATION",
+          "PILOT_APPROVAL",
+        ],
+      },
+    },
+  })
+
+  const suspendedManufacturers = await prisma.manufacturer.count({
+    where: { onboardingStatus: "SUSPENDED" },
+  })
+
+  // ── Authentication volume ─────────────────────────────────────────────────
+  const totalBottlesAuthenticated = await prisma.bottle.count({
+    where: { status: "OPENED" },
+  })
+
+  // ── Fraud events ──────────────────────────────────────────────────────────
+  const totalFraudEvents = await prisma.alertLog.count({
+    where: {
+      createdAt: { gte: last30Days },
+      severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
+    },
+  })
+
+  const criticalIncidents = await prisma.alertLog.count({
+    where: {
+      createdAt: { gte: last90Days },
+      severity: "CRITICAL",
+    },
+  })
+
+  // ── Regional fraud ────────────────────────────────────────────────────────
+  const fraudByRegion = await prisma.scanLog.groupBy({
+    by: ["region"],
+    _count: true,
+    where: {
+      fraudFlag: true,
+      region: { not: null },
+      scannedAt: { gte: last30Days },
+    },
+    orderBy: { _count: { region: "desc" } },
+    take: 10,
+  })
+
+  // ── Suspicious batches ────────────────────────────────────────────────────
+  const suspiciousBatches = await prisma.batch.findMany({
+    where: {
+      bottles: { some: { status: "FLAGGED" } },
+    },
+    select: {
+      id: true,
+      batchCode: true,
+      createdAt: true,
+      targetRegion: true,
+      bottleCount: true,
+      manufacturer: {
+        select: {
+          id: true,
+          companyName: true,
+          rcNumber: true,
+          nafdacNumbers: true,
         },
       },
-    }),
+      product: { select: { name: true } },
+      _count: { select: { bottles: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 15,
+  })
 
-    prisma.manufacturer.count({
-      where: { onboardingStatus: "SUSPENDED" },
-    }),
+  // Flagged counts per batch — sequential to respect connection limit
+  const suspiciousBatchesWithFlagCounts = []
+  for (const batch of suspiciousBatches) {
+    const flaggedCount = await prisma.bottle.count({
+      where: { batchId: batch.id, status: "FLAGGED" },
+    })
+    suspiciousBatchesWithFlagCounts.push({ ...batch, flaggedCount })
+  }
 
-    // Authentication volume
-    prisma.bottle.count({
-      where: { status: "OPENED" },
-    }),
+  // ── Manufacturer compliance ───────────────────────────────────────────────
+  const manufacturerCompliance = await prisma.manufacturer.findMany({
+    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+    select: {
+      id: true,
+      companyName: true,
+      rcNumber: true,
+      nafdacNumbers: true,
+      distributionRegions: true,
+      fraudRateCached: true,
+      totalBottlesGenerated: true,
+      subscriptionStatus: true,
+      createdAt: true,
+    },
+    orderBy: { fraudRateCached: "desc" },
+  })
 
-    // Fraud events — last 30 days
-    prisma.alertLog.count({
+  // ── Recent incidents ──────────────────────────────────────────────────────
+  const recentIncidents = await prisma.alertLog.findMany({
+    where: {
+      severity: { in: ["CRITICAL", "HIGH_CONCERN"] },
+      createdAt: { gte: last90Days },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    include: {
+      manufacturer: {
+        select: { companyName: true, rcNumber: true },
+      },
+    },
+  })
+
+  // ── Monthly fraud trend — sequential loop ─────────────────────────────────
+  const monthlyFraudTrend = []
+  for (let i = 0; i < 6; i++) {
+    const monthStart = new Date()
+    monthStart.setDate(1)
+    monthStart.setHours(0, 0, 0, 0)
+    monthStart.setMonth(monthStart.getMonth() - (5 - i))
+    const monthEnd = new Date(monthStart)
+    monthEnd.setMonth(monthEnd.getMonth() + 1)
+
+    const incidents = await prisma.alertLog.count({
       where: {
-        createdAt: { gte: last30Days },
+        createdAt: { gte: monthStart, lt: monthEnd },
         severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
       },
-    }),
-
-    // Critical incidents — last 90 days
-    prisma.alertLog.count({
-      where: {
-        createdAt: { gte: last90Days },
-        severity: "CRITICAL",
-      },
-    }),
-
-    // Fraud by region — last 30 days
-    prisma.scanLog.groupBy({
-      by: ["region"],
-      _count: true,
-      where: {
-        fraudFlag: true,
-        region: { not: null },
-        scannedAt: { gte: last30Days },
-      },
-      orderBy: { _count: { region: "desc" } },
-      take: 10,
-    }),
-
-    // Suspicious batches — batches with fraud flags
-    prisma.batch.findMany({
-      where: {
-        bottles: {
-          some: { status: "FLAGGED" },
-        },
-      },
-      select: {
-        id: true,
-        batchCode: true,
-        createdAt: true,
-        targetRegion: true,
-        bottleCount: true,
-        manufacturer: {
-          select: {
-            id: true,
-            companyName: true,
-            rcNumber: true,
-            nafdacNumbers: true,
-          },
-        },
-        product: { select: { name: true } },
-        _count: {
-          select: {
-            bottles: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 15,
-    }),
-
-    // Manufacturer compliance overview
-    prisma.manufacturer.findMany({
-      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-      select: {
-        id: true,
-        companyName: true,
-        rcNumber: true,
-        nafdacNumbers: true,
-        distributionRegions: true,
-        fraudRateCached: true,
-        totalBottlesGenerated: true,
-        subscriptionStatus: true,
-        createdAt: true,
-      },
-      orderBy: { fraudRateCached: "desc" },
-    }),
-
-    // Recent critical and high concern incidents
-    prisma.alertLog.findMany({
-      where: {
-        severity: { in: ["CRITICAL", "HIGH_CONCERN"] },
-        createdAt: { gte: last90Days },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      include: {
-        manufacturer: {
-          select: {
-            companyName: true,
-            rcNumber: true,
-          },
-        },
-      },
-    }),
-
-    // Monthly fraud trend — last 6 months
-    Promise.all(
-      Array.from({ length: 6 }, (_, i) => {
-        const monthStart = new Date()
-        monthStart.setDate(1)
-        monthStart.setHours(0, 0, 0, 0)
-        monthStart.setMonth(monthStart.getMonth() - (5 - i))
-        const monthEnd = new Date(monthStart)
-        monthEnd.setMonth(monthEnd.getMonth() + 1)
-
-        return Promise.all([
-          prisma.alertLog.count({
-            where: {
-              createdAt: { gte: monthStart, lt: monthEnd },
-              severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
-            },
-          }),
-          prisma.scanLog.count({
-            where: {
-              scannedAt: { gte: monthStart, lt: monthEnd },
-            },
-          }),
-        ]).then(([incidents, scans]) => ({
-          month: monthStart.toLocaleDateString("en-NG", {
-            month: "short",
-            year: "numeric",
-          }),
-          incidents,
-          scans,
-        }))
-      })
-    ),
-  ])
-
-  // Flagged bottle counts per suspicious batch
-  const suspiciousBatchesWithFlagCounts = await Promise.all(
-    suspiciousBatches.map(async (batch) => {
-      const flaggedCount = await prisma.bottle.count({
-        where: { batchId: batch.id, status: "FLAGGED" },
-      })
-      return { ...batch, flaggedCount }
     })
-  )
+
+    const scans = await prisma.scanLog.count({
+      where: { scannedAt: { gte: monthStart, lt: monthEnd } },
+    })
+
+    monthlyFraudTrend.push({
+      month: monthStart.toLocaleDateString("en-NG", {
+        month: "short",
+        year: "numeric",
+      }),
+      incidents,
+      scans,
+    })
+  }
 
   return {
     totalManufacturers,

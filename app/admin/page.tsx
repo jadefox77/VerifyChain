@@ -19,65 +19,51 @@ async function getCommandCenterMetrics() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const [
-    verificationsToday,
-    activeManufacturers,
-    fraudAlertsToday,
-    criticalAlerts,
-    activeBatches,
-    openedBottlesToday,
-    platformFraudRate,
-    recentAlerts,
-  ] = await Promise.all([
-    prisma.scanLog.count({ where: { scannedAt: { gte: today } } }),
+  const verificationsToday = await prisma.scanLog.count({
+    where: { scannedAt: { gte: today } },
+  })
 
-    prisma.manufacturer.count({
-      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-    }),
+  const activeManufacturers = await prisma.manufacturer.count({
+    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+  })
 
-    prisma.alertLog.count({
-      where: {
-        createdAt: { gte: today },
-        resolved: false,
+  const fraudAlertsToday = await prisma.alertLog.count({
+    where: {
+      createdAt: { gte: today },
+      resolved: false,
+    },
+  })
+
+  const criticalAlerts = await prisma.alertLog.count({
+    where: {
+      severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
+      resolved: false,
+    },
+  })
+
+  const activeBatches = await prisma.batch.count({
+    where: {
+      createdAt: {
+        gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
       },
-    }),
+    },
+  })
 
-    prisma.alertLog.count({
-      where: {
-        severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
-        resolved: false,
-      },
-    }),
+  const openedBottlesToday = await prisma.bottle.count({
+    where: {
+      status: "OPENED",
+      updatedAt: { gte: today },
+    },
+  })
 
-    prisma.batch.count({
-      where: {
-        createdAt: {
-          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-        },
-      },
-    }),
-
-    prisma.bottle.count({
-      where: {
-        status: "OPENED",
-        updatedAt: { gte: today },
-      },
-    }),
-
-    prisma.scanLog.aggregate({
-      _avg: { fraudScore: true },
-      where: { scannedAt: { gte: today } },
-    }),
-
-    prisma.alertLog.findMany({
-      where: { resolved: false },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      include: {
-        manufacturer: { select: { companyName: true } },
-      },
-    }),
-  ])
+  const recentAlerts = await prisma.alertLog.findMany({
+    where: { resolved: false },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+    include: {
+      manufacturer: { select: { companyName: true } },
+    },
+  })
 
   return {
     verificationsToday,
@@ -86,7 +72,7 @@ async function getCommandCenterMetrics() {
     criticalAlerts,
     activeBatches,
     openedBottlesToday,
-    platformFraudRate: (platformFraudRate._avg.fraudScore ?? 0) * 100,
+    platformFraudRate: 0, // computed by fraud pipeline, not inline
     recentAlerts,
   }
 }
@@ -350,34 +336,29 @@ export default async function AdminCommandCenter() {
 // ── Inline sparklines (pure CSS, no chart lib dependency yet) ─────────────────
 
 async function VerificationSparklines() {
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (6 - i))
-    d.setHours(0, 0, 0, 0)
-    return d
-  })
+  const counts: number[] = []
+  const fraudCounts: number[] = []
 
-  const counts = await Promise.all(
-    days.map((day) => {
-      const next = new Date(day)
-      next.setDate(next.getDate() + 1)
-      return prisma.scanLog.count({
-        where: { scannedAt: { gte: day, lt: next } },
-      })
-    })
-  )
+  for (let i = 0; i < 7; i++) {
+    const day = new Date()
+    day.setDate(day.getDate() - (6 - i))
+    day.setHours(0, 0, 0, 0)
+    const next = new Date(day)
+    next.setDate(next.getDate() + 1)
 
-  const fraudCounts = await Promise.all(
-    days.map((day) => {
-      const next = new Date(day)
-      next.setDate(next.getDate() + 1)
-      return prisma.scanLog.count({
-        where: { scannedAt: { gte: day, lt: next }, fraudFlag: true },
-      })
+    const total = await prisma.scanLog.count({
+      where: { scannedAt: { gte: day, lt: next } },
     })
-  )
+    const fraud = await prisma.scanLog.count({
+      where: { scannedAt: { gte: day, lt: next }, fraudFlag: true },
+    })
+
+    counts.push(total)
+    fraudCounts.push(fraud)
+  }
 
   const max = Math.max(...counts, 1)
+
   const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
   const todayIndex = new Date().getDay()
   const orderedLabels = Array.from(
@@ -387,7 +368,6 @@ async function VerificationSparklines() {
 
   return (
     <div className="space-y-4">
-      {/* Bar chart */}
       <div className="flex items-end gap-2 h-32">
         {counts.map((count, i) => {
           const heightPct = Math.max((count / max) * 100, 2)
@@ -395,10 +375,7 @@ async function VerificationSparklines() {
             count > 0 ? (fraudCounts[i] / count) * heightPct : 0
 
           return (
-            <div
-              key={i}
-              className="flex-1 flex flex-col items-center gap-1"
-            >
+            <div key={i} className="flex-1 flex flex-col items-center gap-1">
               <div className="w-full flex flex-col justify-end h-24 gap-0.5">
                 <div
                   className="w-full bg-red-500/40 rounded-t-sm transition-all"
@@ -417,20 +394,15 @@ async function VerificationSparklines() {
         })}
       </div>
 
-      {/* Legend + totals */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-sm bg-blue-500/40" />
-            <span className="text-[10px] font-mono text-gray-500">
-              Genuine
-            </span>
+            <span className="text-[10px] font-mono text-gray-500">Genuine</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-sm bg-red-500/40" />
-            <span className="text-[10px] font-mono text-gray-500">
-              Fraudulent
-            </span>
+            <span className="text-[10px] font-mono text-gray-500">Fraudulent</span>
           </div>
         </div>
         <span className="text-[10px] font-mono text-gray-600">

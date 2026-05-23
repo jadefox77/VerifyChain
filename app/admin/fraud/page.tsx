@@ -1,6 +1,6 @@
 import { requireFraudAccess } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
-import dynamic from "next/dynamic"
+import { FraudMapWrapper } from "@/components/admin/fraud-map-wrapper"
 import {
   ShieldAlert,
   AlertTriangle,
@@ -14,19 +14,6 @@ import {
 
 export const revalidate = 30
 
-// Load map as client-only — Leaflet requires browser DOM
-const FraudMap = dynamic(
-  () => import("@/components/admin/fraud-map").then((m) => m.FraudMap),
-  { ssr: false, loading: () => <MapPlaceholder /> }
-)
-
-function MapPlaceholder() {
-  return (
-    <div className="w-full h-full min-h-[400px] bg-gray-900/60 rounded-lg flex items-center justify-center">
-      <p className="text-xs font-mono text-gray-600">Loading map...</p>
-    </div>
-  )
-}
 
 // ── Data fetchers ─────────────────────────────────────────────────────────────
 
@@ -365,7 +352,7 @@ export default async function FraudIntelligencePage() {
             </div>
           </div>
           <div className="p-3" style={{ height: "420px" }}>
-            <FraudMap scanPoints={mapPoints} />
+           <FraudMapWrapper scanPoints={mapPoints} />
           </div>
         </div>
 

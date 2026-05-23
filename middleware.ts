@@ -1,23 +1,3 @@
-// =============================================================================
-// VerifyChain Africa — Middleware
-// Role-aware route protection for /admin and /dashboard
-// =============================================================================
-//
-// Route protection matrix:
-//
-//   /admin/*                → SUPER_ADMIN, FRAUD_ANALYST, SUPPORT
-//   /admin/regulatory       → SUPER_ADMIN, REGULATORY_OBSERVER
-//   /admin/fraud            → SUPER_ADMIN, FRAUD_ANALYST, SUPPORT
-//   /admin/users            → SUPER_ADMIN only
-//   /dashboard/*            → MANUFACTURER_ADMIN, FACTORY_OPERATOR, DISTRIBUTOR_MANAGER
-//   /onboarding             → authenticated (any role, pre-manufacturer creation)
-//
-// REGULATORY_OBSERVER can only access:
-//   /admin/regulatory, /admin/analytics (read-only)
-//
-// Unauthenticated users are redirected to /auth/signin
-// Unauthorized users (wrong role) are redirected to /unauthorized
-// =============================================================================
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"

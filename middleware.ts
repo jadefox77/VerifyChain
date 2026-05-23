@@ -64,10 +64,13 @@ export async function middleware(req: NextRequest) {
   }
 
   // Read role directly from JWT — no DB, no Prisma, edge-safe
-  const token = await getToken({
-    req,
-    secret: process.env.NEXTAUTH_SECRET!,
-  })
+ const token = await getToken({
+  req,
+  secret: process.env.NEXTAUTH_SECRET!,
+  cookieName: process.env.NODE_ENV === "production"
+    ? "__Secure-authjs.session-token"
+    : "authjs.session-token",
+})
 console.log("[middleware]", pathname, "token:", token ? "present" : "null", "role:", token?.role)
   
 

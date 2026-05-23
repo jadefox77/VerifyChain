@@ -1,15 +1,102 @@
+// VerifyChain Africa — Prisma Schema
+// Phase 2: Admin Portal — Schema Migration
+// =============================================================================
+// MIGRATION SUMMARY (changes from MVP schema):
+//   - Added UserRole enum + role field to User
+//   - Added OnboardingStatus, SubscriptionPlan, SubscriptionStatus enums
+//   - Expanded Manufacturer model with full onboarding fields
+//   - Added AlertLog model + AlertSeverity enum
+//   - Added AdminNote model for onboarding reviewer notes
+//   - Added AuditLog model for security/compliance trail
+// =============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-   url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
-// -----------------------------------------------
-// AUTH TABLES (required by NextAuth PrismaAdapter)
-// -----------------------------------------------
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum UserRole {
+  SUPER_ADMIN          // VerifyChain staff — full platform access
+  MANUFACTURER_ADMIN   // Manufacturer tenant admin
+  FACTORY_OPERATOR     // Production line operator — limited write
+  FRAUD_ANALYST        // VerifyChain fraud team — read + alert management
+  REGULATORY_OBSERVER  // NAFDAC / SON — read-only, scoped views
+  DISTRIBUTOR_MANAGER  // Distribution partner — scoped read
+  SUPPORT              // VerifyChain support team — read + manufacturer mgmt
+}
+
+enum OnboardingStatus {
+  PENDING_REVIEW           // Submitted, awaiting VerifyChain review
+  COMPLIANCE_VERIFICATION  // RC number / NAFDAC check in progress
+  TECHNICAL_INTEGRATION    // API keys issued, integration being configured
+  PILOT_APPROVAL           // Test batch running, awaiting sign-off
+  ACTIVE_PRODUCTION        // Fully onboarded, live on platform
+  REJECTED                 // Onboarding rejected — see AdminNote for reason
+  SUSPENDED                // Previously active, now suspended
+}
+
+enum SubscriptionPlan {
+  FREE           // Trial / evaluation tier
+  STARTER        // Up to 50,000 bottles/month
+  PROFESSIONAL   // Up to 500,000 bottles/month
+  ENTERPRISE     // Unlimited + dedicated support
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum AlertSeverity {
+  SAFE         // Informational — no action required
+  SUSPICIOUS   // Low-confidence anomaly — monitor
+  HIGH_CONCERN // High-confidence anomaly — investigate
+  CRITICAL     // Confirmed fraud event — immediate action
+}
+
+enum AlertType {
+  INVALID_PAIRING          // Cap/bottle identity mismatch
+  MASS_CLONING             // Same identity scanned at scale
+  GEOGRAPHIC_TELEPORTATION // Same identity scanned in impossible locations
+  SUPPLY_CHAIN_DRIFT       // Product scanned outside expected region
+  REPEAT_SCAN_ABUSE        // Same identity scanned >threshold times
+  BOT_ACTIVITY             // Automated/scripted verification behavior
+  REFILL_DETECTED          // Previously opened cap re-sealed indicators
+  PRODUCTION_PAIRING_FAIL  // Factory-side scan pairing failure
+  SUSPICIOUS_RETAIL_CLUSTER // Geographic cluster of fraud at single retailer
+  IDENTITY_EXHAUSTION      // Serial range being systematically probed
+}
+
+enum BottleStatus {
+  MINT    // Generated, never scanned
+  OPENED  // Successfully verified as first-open
+  FLAGGED // Fraud detected
+}
+
+enum CapStatus {
+  SEALED  // Cap intact, never scanned internally
+  OPENED  // Hidden QR scanned — first open confirmed
+  FLAGGED // Fraud detected on cap
+}
+
+enum ScanLayer {
+  BOTTLE // Outer bottle QR scan
+  CAP    // Hidden internal cap QR scan
+}
+
+// =============================================================================
+// USER
+// =============================================================================
 
 model User {
   id            String    @id @default(cuid())
@@ -17,15 +104,316 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
-  password      String?
-  accounts      Account[]
-  sessions      Session[]
+  role          UserRole  @default(MANUFACTURER_ADMIN)
 
-  manufacturer  Manufacturer?
+  // Relations
+  accounts     Account[]
+  sessions     Session[]
+  manufacturer Manufacturer?
+  auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([role])
 }
+
+// =============================================================================
+// MANUFACTURER
+// =============================================================================
+
+model Manufacturer {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Company Information ───────────────────────────────────────────────────
+  companyName        String
+  rcNumber           String?  @unique // CAC Registration number
+  taxId              String?
+  industryType       String?  // e.g. "Beverage", "Water", "Spirits"
+  factoryLocations   String?  // JSON array of location strings
+  productionCapacity Int?     // Max bottles per day (factory-rated)
+  brandPortfolio     String?  // JSON array of brand names
+
+  // ── Contact Information ───────────────────────────────────────────────────
+  primaryContact    String?
+  phone             String?
+  technicalContact  String?  // Name + email of integration contact
+  complianceOfficer String?  // Name + email of compliance contact
+
+  // ── Operational Information ───────────────────────────────────────────────
+  estimatedBottlesPerMonth Int?
+  packagingType            String?  // e.g. "PET", "Glass", "Aluminum Can"
+  capSupplier              String?  // Name of cap manufacturer
+  bottlingLineType         String?  // e.g. "Semi-Auto", "Fully Automated"
+  erpSystem                String?  // e.g. "SAP", "Odoo", "None"
+
+  // ── Regulatory Information ────────────────────────────────────────────────
+  nafdacNumbers      String?  // JSON array of NAFDAC registration numbers
+  distributionRegions String? // JSON array of states/regions
+
+  // ── Platform Status ───────────────────────────────────────────────────────
+  onboardingStatus   OnboardingStatus   @default(PENDING_REVIEW)
+  subscriptionPlan   SubscriptionPlan   @default(FREE)
+  subscriptionStatus SubscriptionStatus @default(ACTIVE)
+
+  // ── Computed / Cached Metrics (updated via background job) ───────────────
+  totalBottlesGenerated Int @default(0)
+  totalScans            Int @default(0)
+  totalFraudFlags       Int @default(0)
+  fraudRateCached       Float @default(0) // Recomputed periodically
+
+  // Relations
+  products   Product[]
+  batches    Batch[]
+  bottles    Bottle[]
+  scanLogs   ScanLog[]
+  alertLogs  AlertLog[]
+  adminNotes AdminNote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([onboardingStatus])
+  @@index([subscriptionPlan])
+  @@index([rcNumber])
+}
+
+// =============================================================================
+// PRODUCT
+// =============================================================================
+
+model Product {
+  id             String       @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+
+  name        String
+  sku         String?
+  category    String?  // e.g. "Beer", "Water", "Soft Drink", "Energy Drink"
+  volumeMl    Int?
+  description String?
+  active      Boolean @default(true)
+
+  batches Batch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([manufacturerId])
+}
+
+// =============================================================================
+// BATCH
+// =============================================================================
+
+model Batch {
+  id             String       @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?     @relation(fields: [productId], references: [id])
+
+  batchCode      String  @unique
+  targetRegion   String? // Expected distribution region — used for drift detection
+  bottleCount    Int
+  expiryDate     DateTime?
+  productionDate DateTime?
+  notes          String?
+
+  bottles  Bottle[]
+  scanLogs ScanLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([manufacturerId])
+  @@index([targetRegion])
+}
+
+// =============================================================================
+// BOTTLE
+// =============================================================================
+
+model Bottle {
+  id             String       @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  batchId        String
+  batch          Batch        @relation(fields: [batchId], references: [id])
+
+  serialId  String      @unique // NanoID — embedded in bottle QR URL
+  hmacSig   String      // HMAC-SHA256 signature for tamper detection
+  status    BottleStatus @default(MINT)
+  lastScannedAt DateTime?
+
+  cap      Cap?
+  scanLogs ScanLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([serialId])
+  @@index([manufacturerId])
+  @@index([status])
+  @@index([batchId])
+}
+
+// =============================================================================
+// CAP
+// =============================================================================
+
+model Cap {
+  id       String @id @default(cuid())
+  bottleId String @unique
+  bottle   Bottle @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+
+  topCode        String    @unique // Visible alphanumeric on top of cap e.g. "X7P2A9"
+  hiddenSerialId String    @unique // Internal QR identity — only visible after opening
+  hiddenHmacSig  String    // HMAC signature for hidden QR
+  status         CapStatus @default(SEALED)
+  openedAt       DateTime?
+
+  scanLogs ScanLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([topCode])
+  @@index([hiddenSerialId])
+  @@index([status])
+}
+
+// =============================================================================
+// SCAN LOG
+// =============================================================================
+
+model ScanLog {
+  id             String       @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id])
+  batchId        String?
+  batch          Batch?       @relation(fields: [batchId], references: [id])
+  bottleId       String?
+  bottle         Bottle?      @relation(fields: [bottleId], references: [id])
+  capId          String?
+  cap            Cap?         @relation(fields: [capId], references: [id])
+
+  scanLayer   ScanLayer
+  fraudFlag   Boolean   @default(false)
+  flagReason  String?   // Human-readable fraud reason
+  fraudScore  Float?    // 0.0–1.0 AI confidence score
+
+  // Geographic data
+  lat         Float?
+  lng         Float?
+  country     String?
+  region      String?  // State/province
+
+  // Channel
+  channel     String?  // "whatsapp" | "qr_direct" | "api"
+  userAgent   String?
+
+  // Timing
+  scannedAt   DateTime @default(now())
+
+  @@index([manufacturerId])
+  @@index([bottleId])
+  @@index([capId])
+  @@index([fraudFlag])
+  @@index([scannedAt])
+  @@index([lat, lng])
+}
+
+// =============================================================================
+// ALERT LOG
+// =============================================================================
+
+model AlertLog {
+  id             String       @id @default(cuid())
+  manufacturerId String?
+  manufacturer   Manufacturer? @relation(fields: [manufacturerId], references: [id])
+
+  type           AlertType
+  severity       AlertSeverity
+  message        String        // Human-readable alert description
+  detail         String?       // Extended technical detail / JSON context
+  batchId        String?
+  affectedCount  Int?          // Number of bottles/scans implicated
+
+  // Location context
+  lat            Float?
+  lng            Float?
+  region         String?
+
+  // AI scoring
+  confidenceScore Float?       // 0.0–1.0
+
+  // Resolution
+  resolved       Boolean   @default(false)
+  resolvedAt     DateTime?
+  resolvedBy     String?   // User ID who resolved
+
+  createdAt      DateTime  @default(now())
+
+  @@index([severity])
+  @@index([type])
+  @@index([manufacturerId])
+  @@index([resolved])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// ADMIN NOTE
+// =============================================================================
+// Internal notes on manufacturer onboarding — written by VerifyChain admins
+
+model AdminNote {
+  id             String       @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+
+  authorId  String  // User ID of admin who wrote the note
+  authorName String // Denormalized for display without join
+  content   String
+  isInternal Boolean @default(true) // false = visible to manufacturer
+
+  createdAt DateTime @default(now())
+
+  @@index([manufacturerId])
+}
+
+// =============================================================================
+// AUDIT LOG
+// =============================================================================
+// Immutable record of all admin actions for compliance and security
+
+model AuditLog {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  action     String  // e.g. "MANUFACTURER_STATUS_CHANGED", "USER_ROLE_UPDATED"
+  targetType String? // e.g. "Manufacturer", "User", "AlertLog"
+  targetId   String? // ID of the affected record
+  before     String? // JSON snapshot of state before change
+  after      String? // JSON snapshot of state after change
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// NEXTAUTH MODELS (unchanged from MVP)
+// =============================================================================
 
 model Account {
   id                String  @id @default(cuid())
@@ -33,12 +421,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?
-  access_token      String?
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?
+  id_token          String? @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -51,138 +439,13 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
   identifier String
-  token      String
+  token      String   @unique
   expires    DateTime
 
   @@unique([identifier, token])
-}
-
-// -----------------------------------------------
-// VERIFYCHAIN CORE TABLES
-// -----------------------------------------------
-
-model Manufacturer {
-  id          String  @id @default(cuid())
-  userId      String  @unique
-  companyName String
-  logoUrl     String?
-  contactEmail String
-
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  products Product[]
-  batches  Batch[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Product {
-  id             String @id @default(cuid())
-  manufacturerId String
-  name           String
-  category       String
-  description    String?
-
-  manufacturer Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
-  batches      Batch[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Batch {
-  id             String @id @default(cuid())
-  manufacturerId String
-  productId      String
-  quantity       Int
-  notes          String?
-  targetRegion   String?
-
-  manufacturer Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
-  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-  bottles      Bottle[]
-
-  createdAt DateTime @default(now())
-}
-
-model Bottle {
-  id        String       @id @default(cuid())
-  serialId  String       @unique
-  batchId   String
-  status    BottleStatus @default(MINT)
-
-  // First scan metadata
-  firstScannedAt  DateTime?
-  firstScannedLat Float?
-  firstScannedLng Float?
-  firstPhoneHash  String?
-
-  batch    Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  cap      Cap?
-  scanLogs ScanLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Cap {
-  id        String    @id @default(cuid())
-  bottleId  String    @unique
-  topCode   String    @unique
-  hiddenSerialId String @unique
-  status    CapStatus @default(SEALED)
-
-  firstOpenedAt  DateTime?
-  firstOpenedLat Float?
-  firstOpenedLng Float?
-  firstPhoneHash String?
-
-  bottle   Bottle    @relation(fields: [bottleId], references: [id], onDelete: Cascade)
-  scanLogs ScanLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ScanLog {
-  id        String      @id @default(cuid())
-  bottleId  String?
-  capId     String?
-  phoneHash String?
-  lat       Float?
-  lng       Float?
-  city      String?
-  country   String?
-  scanCount Int
-  scanLayer ScanLayer
-  fraudFlag Boolean     @default(false)
-  flagReason String?
-
-  bottle Bottle? @relation(fields: [bottleId], references: [id], onDelete: Cascade)
-  cap    Cap?    @relation(fields: [capId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-}
-
-enum BottleStatus {
-  MINT
-  OPENED
-  FLAGGED
-}
-
-enum CapStatus {
-  SEALED
-  OPENED
-  FLAGGED
-}
-
-enum ScanLayer {
-  BOTTLE
-  CAP
 }

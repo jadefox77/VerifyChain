@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { formatSerialId } from "@/lib/serial"
-import { FraudMap } from "@/components/admin/fraud-map"
+import { FraudMap } from "@/components/fraud-map"
 
 export default async function FraudPage() {
   const session = await auth()

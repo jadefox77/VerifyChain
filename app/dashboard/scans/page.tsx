@@ -40,7 +40,7 @@ export default async function ScansPage({
   const [scanLogs, totalCount] = await Promise.all([
     prisma.scanLog.findMany({
       where: filterWhere,
-      orderBy: { createdAt: "desc" },
+      orderBy: { scannedAt: "desc" },
       skip,
       take: ITEMS_PER_PAGE,
       include: {
@@ -115,7 +115,7 @@ export default async function ScansPage({
                       }`} />
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {log.bottle.batch.product.name}
+                          {log.bottle.batch.product?.name ?? "No Product"}
                         </p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">
                           {formatSerialId(log.bottle.serialId)}
@@ -138,9 +138,9 @@ export default async function ScansPage({
                     </div>
                   </div>
                   <div className="mt-2 ml-5 flex flex-wrap gap-x-4 gap-y-1">
-                    <span className="text-xs text-gray-400 dark:text-gray-500">
-                      Scan #{log.scanCount}
-                    </span>
+<span className="text-xs text-gray-400 dark:text-gray-500">
+  {log.scanLayer === "BOTTLE" ? "Bottle Scan" : "Cap Scan"}
+</span>
                     {log.lat && log.lng && (
                       <span className="text-xs text-gray-400 dark:text-gray-500">
                         {log.lat.toFixed(2)}, {log.lng.toFixed(2)}
@@ -152,7 +152,7 @@ export default async function ScansPage({
                       </span>
                     )}
                     <span className="text-xs text-gray-400 dark:text-gray-500">
-                      {new Date(log.createdAt).toLocaleDateString("en-NG", {
+                      {new Date(log.scannedAt).toLocaleDateString("en-NG", {
                         timeZone: "Africa/Lagos",
                         day: "numeric",
                         month: "short",

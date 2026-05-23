@@ -21,12 +21,12 @@ export default async function FraudPage() {
           fraudFlag: true,
           bottle: { batch: { manufacturerId: manufacturer.id } },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { scannedAt: "desc" },
         include: {
           bottle: {
             include: {
               batch: { include: { product: true } },
-              scanLogs: { orderBy: { createdAt: "asc" }, take: 1 },
+              scanLogs: { orderBy: { scannedAt: "asc" }, take: 1 },
             },
           },
         },
@@ -47,7 +47,7 @@ export default async function FraudPage() {
           flagReason: { contains: "Supply chain drift" },
           bottle: { batch: { manufacturerId: manufacturer.id } },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { scannedAt: "desc" },
         take: 20,
         include: {
           bottle: {
@@ -69,7 +69,7 @@ export default async function FraudPage() {
           lat: true,
           lng: true,
           fraudFlag: true,
-          createdAt: true,
+          scannedAt: true,
         },
       }),
     ])
@@ -257,14 +257,14 @@ export default async function FraudPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {log.bottle?.batch.product.name ?? "Unknown product"}
+                      {log.bottle?.batch?.product?.name ?? "Unknown product"}
                     </p>
                     <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
                       {log.flagReason}
                     </p>
                   </div>
                   <p className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
-                    {new Date(log.createdAt).toLocaleDateString("en-NG", {
+                    {new Date(log.scannedAt).toLocaleDateString("en-NG", {
                       timeZone: "Africa/Lagos",
                       day: "numeric",
                       month: "short",
@@ -312,7 +312,7 @@ export default async function FraudPage() {
                       <span className="text-lg shrink-0">🚨</span>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {log.bottle.batch.product.name}
+                          {log.bottle.batch.product?.name ?? "No Product"}
                         </p>
                         <p className="text-xs font-mono text-gray-400 dark:text-gray-500 mt-0.5">
                           {formatSerialId(log.bottle.serialId)}
@@ -323,7 +323,7 @@ export default async function FraudPage() {
                       </div>
                     </div>
                     <p className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
-                      {new Date(log.createdAt).toLocaleDateString("en-NG", {
+                      {new Date(log.scannedAt).toLocaleDateString("en-NG", {
                         timeZone: "Africa/Lagos",
                         day: "numeric",
                         month: "short",

@@ -8,6 +8,7 @@ import {
   generateHiddenSerialId,
 } from "@/lib/serial"
 import { redirect } from "next/navigation"
+import crypto from "crypto"
 
 export async function generateBatch(formData: FormData) {
   const session = await auth()
@@ -35,33 +36,48 @@ export async function generateBatch(formData: FormData) {
     data: {
       manufacturerId: manufacturer.id,
       productId,
-      quantity,
+      bottleCount: quantity,
       notes: notes || null,
       targetRegion: targetRegion || null,
+      batchCode: `BATCH-${Date.now()}`,
     },
   })
 
-  // Generate bottles and caps together
-  const bottlesData = Array.from({ length: quantity }, () => ({
-    serialId: generateSerialId(),
-    batchId: batch.id,
-  }))
+  // Generate bottles with all required fields
+  const bottlesData = Array.from({ length: quantity }, () => {
+    const serialId = generateSerialId()
+    return {
+      serialId,
+      batchId: batch.id,
+      manufacturerId: manufacturer.id,
+      hmacSig: crypto
+        .createHmac("sha256", process.env.QR_SECRET!)
+        .update(serialId)
+        .digest("hex"),
+    }
+  })
 
-  // Create all bottles first
   await prisma.bottle.createMany({ data: bottlesData })
 
-  // Fetch the created bottles to get their IDs
+  // Fetch created bottles to get their IDs
   const bottles = await prisma.bottle.findMany({
     where: { batchId: batch.id },
     select: { id: true },
   })
 
-  // Create a cap for every bottle
-  const capsData = bottles.map((bottle) => ({
-    bottleId: bottle.id,
-    topCode: generateTopCapCode(),
-    hiddenSerialId: generateHiddenSerialId(),
-  }))
+  // Create caps with all required fields including hiddenHmacSig
+  const capsData = bottles.map((bottle) => {
+    const hiddenSerialId = generateHiddenSerialId()
+    return {
+      bottleId: bottle.id,
+      topCode: generateTopCapCode(),
+      hiddenSerialId,
+      hiddenHmacSig: crypto
+        .createHmac("sha256", process.env.QR_SECRET!)
+        .update(hiddenSerialId)
+        .digest("hex"),
+    }
+  })
 
   await prisma.cap.createMany({ data: capsData })
 

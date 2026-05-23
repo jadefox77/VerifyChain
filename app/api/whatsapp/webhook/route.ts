@@ -83,7 +83,6 @@ export async function POST(req: NextRequest) {
       const result = await verifyCap({
         hiddenSerialId: code,
         bottleSerialId: pendingBottleSerial,
-        phoneHash,
       })
 
       pendingBottleScans.delete(from)
@@ -114,7 +113,7 @@ export async function POST(req: NextRequest) {
 
     } else if (isBottleCode) {
       // Step 1 — bottle verification
-      const result = await verifyBottle({ serialId: code, phoneHash })
+      const result = await verifyBottle({ serialId: code })
 
       if (result.status === "PROMPT_CAP") {
         pendingBottleScans.set(from, code)
@@ -149,7 +148,7 @@ export async function POST(req: NextRequest) {
 
     } else {
       // Unknown code length — try cap lookup first, then give up
-      const result = await verifyCap({ hiddenSerialId: code, phoneHash })
+      const result = await verifyCap({ hiddenSerialId: code })
 
       if (result.status !== "NOT_FOUND") {
         let replyText = ""

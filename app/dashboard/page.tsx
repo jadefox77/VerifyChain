@@ -49,7 +49,7 @@ export default async function DashboardPage() {
     // Recent scan activity
     prisma.scanLog.findMany({
       where: { bottle: { batch: { manufacturerId: manufacturer.id } } },
-      orderBy: { createdAt: "desc" },
+      orderBy: { scannedAt: "desc" },
       take: 5,
       include: {
         bottle: {
@@ -161,7 +161,7 @@ export default async function DashboardPage() {
                     }`} />
                     <div className="min-w-0">
                       <p className="text-sm text-gray-900 dark:text-white truncate">
-                        {log.bottle.batch.product.name}
+                        {log.bottle.batch.product?.name ?? "No Product"}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
@@ -184,7 +184,7 @@ export default async function DashboardPage() {
                       </span>
                     )}
                     <p className="text-xs text-gray-400 dark:text-gray-500">
-                      {new Date(log.createdAt).toLocaleDateString("en-NG", {
+                      {new Date(log.scannedAt).toLocaleDateString("en-NG", {
                         timeZone: "Africa/Lagos",
                         day: "numeric",
                         month: "short",

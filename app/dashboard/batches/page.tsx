@@ -67,7 +67,7 @@ type BatchItem = {
   id: string
   notes: string | null
   createdAt: Date
-  product: { name: string }
+  product: { name: string } | null
   _count: { bottles: number }
 }
 
@@ -206,7 +206,7 @@ function BatchCard({ batch }: { batch: BatchItem }) {
     >
       <div>
         <p className="text-sm font-semibold dark:text-white dark:text-white">
-          {batch.product.name}
+          {batch.product?.name ?? "No Product"}
         </p>
         <p className="text-xs dark:text-gray-500 mt-0.5">
           {batch.notes ?? "No notes"} · {date}

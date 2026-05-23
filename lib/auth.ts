@@ -11,7 +11,7 @@ import type { UserRole } from "@prisma/client";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  
+
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -32,10 +32,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user, trigger }) {
       // First sign-in: `user` object is populated by the adapter
       if (user) {
-        token.id = user.id;
-        token.role = user.role as UserRole;
-        token.manufacturerId = user.manufacturerId ?? null;
-      }
+  if (user.id) token.id = user.id;
+  token.role = user.role as UserRole;
+  token.manufacturerId = user.manufacturerId ?? null;
+}
 
       // Force-refresh: admin changed a user's role — re-fetch from DB
       if (trigger === "update") {

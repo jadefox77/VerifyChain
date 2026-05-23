@@ -55,7 +55,7 @@ export default async function BatchDetailPage({
 
       <div className="flex items-start justify-between mb-8 gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">{batch.product.name}</h2>
+         <h2 className="text-2xl font-bold text-gray-900">{batch.product?.name ?? "Unknown Product"}</h2>
           <p className="text-gray-500 text-sm mt-1">
             {batch.notes ?? "No notes"} ·{" "}
             {new Date(batch.createdAt).toLocaleDateString("en-NG", {

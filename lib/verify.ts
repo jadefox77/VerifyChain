@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma"
 
 type VerifyInput = {
   serialId: string
-  phoneHash?: string
   lat?: number
   lng?: number
 }
@@ -15,7 +14,7 @@ type VerifyResult =
   | { status: "NOT_FOUND"; message: string }
 
 export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
-  const { serialId, phoneHash, lat, lng } = input
+  const { serialId, lat, lng } = input
 
   const bottle = await prisma.bottle.findUnique({
     where: { serialId },
@@ -24,7 +23,7 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
       batch: { include: { product: true } },
       scanLogs: {
         where: { scanLayer: "BOTTLE" },
-        orderBy: { createdAt: "asc" },
+        orderBy: { scannedAt: "asc" },
       },
     },
   })
@@ -43,23 +42,22 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
     }
   }
 
-  // Log the bottle scan — no fraud flag, bottle QR scanning alone is not fraud
+  // Log the bottle scan
   await prisma.scanLog.create({
     data: {
       bottleId: bottle.id,
-      phoneHash: phoneHash ?? null,
+      manufacturerId: bottle.manufacturerId,
+      batchId: bottle.batchId,
       lat: lat ?? null,
       lng: lng ?? null,
-      scanCount: bottle.scanLogs.length + 1,
       scanLayer: "BOTTLE",
       fraudFlag: false,
       flagReason: null,
     },
   })
 
-  // Cap has already been opened — this bottle may have been refilled
+  // Cap already opened — possible refill
   if (bottle.cap && bottle.cap.status === "OPENED") {
-    // Flag the bottle
     await prisma.bottle.update({
       where: { id: bottle.id },
       data: { status: "FLAGGED" },
@@ -70,35 +68,27 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
       data: { status: "FLAGGED" },
     })
 
-    // Write a fraud scan log
     await prisma.scanLog.create({
       data: {
         bottleId: bottle.id,
-        phoneHash: phoneHash ?? null,
+        manufacturerId: bottle.manufacturerId,
+        batchId: bottle.batchId,
         lat: lat ?? null,
         lng: lng ?? null,
-        scanCount: bottle.scanLogs.length + 2,
         scanLayer: "BOTTLE",
         fraudFlag: true,
-        flagReason: "Cap already opened before bottle QR was scanned — possible refill",
+        flagReason: "Cap already opened before bottle QR scanned — possible refill",
       },
     })
 
     return {
       status: "CAP_ALREADY_OPENED",
-      message: `The hidden cap inside this bottle was already opened on ${bottle.cap.firstOpenedAt?.toLocaleDateString("en-NG", {
-        timeZone: "Africa/Lagos",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })}. This bottle may have been refilled. Do not consume.`,
-      capOpenedAt: bottle.cap.firstOpenedAt!,
+      message: `The hidden cap inside this bottle was already opened. This bottle may have been refilled. Do not consume.`,
+      capOpenedAt: bottle.cap.openedAt ?? new Date(),
     }
   }
 
-  // Cap has been flagged
+  // Cap flagged
   if (bottle.cap && bottle.cap.status === "FLAGGED") {
     return {
       status: "FLAGGED",
@@ -106,20 +96,20 @@ export async function verifyBottle(input: VerifyInput): Promise<VerifyResult> {
     }
   }
 
-  // Bottle already fully verified
+  // Already fully verified
   if (bottle.status === "OPENED") {
     return {
       status: "ALREADY_VERIFIED",
       message: "This bottle has already been opened and fully verified.",
-      firstScan: bottle.firstScannedAt!,
+      firstScan: bottle.updatedAt,
     }
   }
 
-  // Normal flow — prompt consumer to scan cap
+  // Normal flow
   return {
     status: "PROMPT_CAP",
-    message: `Bottle identity confirmed for ${bottle.batch.product.name}. Now open the bottle and scan the hidden QR code inside the cap to complete verification.`,
-    productName: bottle.batch.product.name,
+    message: `Bottle identity confirmed for ${bottle.batch.product?.name ?? "Unknown Product"}. Now open the bottle and scan the hidden QR code inside the cap to complete verification.`,
+    productName: bottle.batch.product?.name ?? "Unknown Product",
     topCode: bottle.cap?.topCode ?? "",
   }
 }

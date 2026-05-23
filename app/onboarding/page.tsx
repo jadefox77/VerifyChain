@@ -89,17 +89,17 @@ async function createManufacturer(formData: FormData) {
   if (!session?.user?.id) redirect("/login")
 
   const companyName = formData.get("companyName") as string
-  const contactEmail = formData.get("contactEmail") as string
+const contactEmail = formData.get("contactEmail") as string
 
-  if (!companyName || !contactEmail) return
+if (!companyName) return
 
-  await prisma.manufacturer.create({
-    data: {
-      userId: session.user.id,
-      companyName,
-      contactEmail,
-    },
-  })
+await prisma.manufacturer.create({
+  data: {
+    userId: session.user.id,
+    companyName,
+    primaryContact: contactEmail,
+  },
+})
 
   redirect("/dashboard")
 }

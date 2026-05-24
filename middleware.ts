@@ -122,6 +122,10 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
+  if (pathname.startsWith("/onboarding")) {
+  return NextResponse.next()
+}
+
   // /dashboard routes
   if (pathname.startsWith("/dashboard")) {
     if (!hasRole(role, MANUFACTURER_ROLES)) {

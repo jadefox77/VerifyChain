@@ -21,61 +21,62 @@ async function getFraudSummary() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const totalAlerts = await prisma.alertLog.count({
-    where: { resolved: false },
-  })
+  // Batch 1
+  const [totalAlerts, criticalAlerts, highConcernAlerts] =
+    await Promise.all([
+      prisma.alertLog.count({ where: { resolved: false } }),
+      prisma.alertLog.count({
+        where: { severity: "CRITICAL", resolved: false },
+      }),
+      prisma.alertLog.count({
+        where: { severity: "HIGH_CONCERN", resolved: false },
+      }),
+    ])
 
-  const criticalAlerts = await prisma.alertLog.count({
-    where: { severity: "CRITICAL", resolved: false },
-  })
+  // Batch 2
+  const [suspiciousAlerts, resolvedToday, alertsByType] =
+    await Promise.all([
+      prisma.alertLog.count({
+        where: { severity: "SUSPICIOUS", resolved: false },
+      }),
+      prisma.alertLog.count({
+        where: { resolved: true, resolvedAt: { gte: today } },
+      }),
+      prisma.alertLog.groupBy({
+        by: ["type"],
+        _count: true,
+        where: { resolved: false },
+        orderBy: { _count: { type: "desc" } },
+      }),
+    ])
 
-  const highConcernAlerts = await prisma.alertLog.count({
-    where: { severity: "HIGH_CONCERN", resolved: false },
-  })
-
-  const suspiciousAlerts = await prisma.alertLog.count({
-    where: { severity: "SUSPICIOUS", resolved: false },
-  })
-
-  const resolvedToday = await prisma.alertLog.count({
-    where: {
-      resolved: true,
-      resolvedAt: { gte: today },
-    },
-  })
-
-  const alertsByType = await prisma.alertLog.groupBy({
-    by: ["type"],
-    _count: true,
-    where: { resolved: false },
-    orderBy: { _count: { type: "desc" } },
-  })
-
-  const manufacturerFraudRates = await prisma.manufacturer.findMany({
-    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-    select: {
-      id: true,
-      companyName: true,
-      fraudRateCached: true,
-      totalBottlesGenerated: true,
-      totalFraudFlags: true,
-      _count: { select: { alertLogs: true } },
-    },
-    orderBy: { fraudRateCached: "desc" },
-    take: 10,
-  })
-
-  const recentCritical = await prisma.alertLog.findMany({
-    where: {
-      severity: { in: ["CRITICAL", "HIGH_CONCERN"] },
-      resolved: false,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-    include: {
-      manufacturer: { select: { companyName: true } },
-    },
-  })
+  // Batch 3
+  const [manufacturerFraudRates, recentCritical] = await Promise.all([
+    prisma.manufacturer.findMany({
+      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+      select: {
+        id: true,
+        companyName: true,
+        fraudRateCached: true,
+        totalBottlesGenerated: true,
+        totalFraudFlags: true,
+        _count: { select: { alertLogs: true } },
+      },
+      orderBy: { fraudRateCached: "desc" },
+      take: 10,
+    }),
+    prisma.alertLog.findMany({
+      where: {
+        severity: { in: ["CRITICAL", "HIGH_CONCERN"] },
+        resolved: false,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      include: {
+        manufacturer: { select: { companyName: true } },
+      },
+    }),
+  ])
 
   return {
     totalAlerts,
@@ -88,6 +89,7 @@ async function getFraudSummary() {
     recentCritical,
   }
 }
+
 
 async function getScanPoints() {
   // Get recent scan points with location data for the map
@@ -236,9 +238,15 @@ const SEVERITY_CONFIG = {
 export default async function FraudIntelligencePage() {
   await requireFraudAccess()
 
-const summary = await getFraudSummary()
-const scanPoints = await getScanPoints()
+// Batch A — summary and scan points together
+const [summary, scanPoints] = await Promise.all([
+  getFraudSummary(),
+  getScanPoints(),
+])
+
+// Regional breakdown after
 const regional = await getRegionalBreakdown()
+
 
   const mapPoints = scanPoints
     .filter((p) => p.lat !== null && p.lng !== null)

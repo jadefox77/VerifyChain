@@ -16,6 +16,7 @@ const navItems = [
   { href: "/dashboard/scans", label: "Scan Logs", exact: false },
   { href: "/dashboard/fraud", label: "Fraud Alerts", exact: false },
   { href: "/dashboard/products", label: "Products", exact: false },
+  { href: "/dashboard/billing", label: "Billing", exact: false },
 ]
 
 function NavItem({

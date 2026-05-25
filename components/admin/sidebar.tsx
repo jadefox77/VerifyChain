@@ -18,6 +18,7 @@ import {
   Shield,
   AlertTriangle,
   Activity,
+  CreditCard,
 } from "lucide-react"
 import type { UserRole } from "@prisma/client"
 import { cn } from "@/lib/utils"
@@ -98,6 +99,13 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN"],
     group: "platform",
   },
+  {
+  label: "Billing",
+  href: "/admin/billing",
+  icon: CreditCard,
+  roles: ["SUPER_ADMIN"],
+  group: "platform",
+},
 ]
 
 const GROUP_LABELS = {

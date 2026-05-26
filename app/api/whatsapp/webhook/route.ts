@@ -11,9 +11,15 @@ import {
   buildCapAlreadyOpenedMessage,
   buildAlreadyVerifiedMessage,
 } from "@/lib/whatsapp"
+import {
+  setPendingScan,
+  getPendingScan,
+  clearPendingScan,
+  checkRateLimit,
+  trackRateLimitHit,
+  isAbusivePhone,
+} from "@/lib/whatsapp-session"
 import crypto from "crypto"
-
-const pendingBottleScans = new Map<string, string>()
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -32,13 +38,56 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
+    const message =
+      body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
     if (!message) {
-      return NextResponse.json({ status: "no_message" }, { status: 200 })
+      return NextResponse.json(
+        { status: "no_message" },
+        { status: 200 }
+      )
     }
 
     const from = message.from
     const messageType = message.type
+
+    // ── Abuse check ───────────────────────────────────────────────────────
+    const abusive = await isAbusivePhone(from)
+    if (abusive) {
+      // Silently ignore abusive phones — don't respond to avoid
+      // giving feedback to automated systems
+      return NextResponse.json(
+        { status: "ignored" },
+        { status: 200 }
+      )
+    }
+
+    // ── Rate limiting ─────────────────────────────────────────────────────
+    const rateLimit = await checkRateLimit(from)
+    if (!rateLimit.allowed) {
+      await trackRateLimitHit(from)
+
+      const resetMins = Math.ceil(
+        (rateLimit.reset - Date.now()) / 1000 / 60
+      )
+
+      await sendMessage(
+        from,
+        [
+          "⚠️ *Too Many Requests*",
+          "",
+          `You have reached the verification limit. Please try again in ${resetMins} minute${resetMins !== 1 ? "s" : ""}.`,
+          "",
+          "If you believe this is an error contact support.",
+          "",
+          "_VerifyChain Africa_",
+        ].join("\n")
+      )
+
+      return NextResponse.json(
+        { status: "rate_limited" },
+        { status: 200 }
+      )
+    }
 
     // Handle location share
     if (messageType === "location") {
@@ -46,7 +95,10 @@ export async function POST(req: NextRequest) {
         from,
         "📍 Location received. Now send your bottle serial code or scan the QR code."
       )
-      return NextResponse.json({ status: "location_stored" }, { status: 200 })
+      return NextResponse.json(
+        { status: "location_stored" },
+        { status: 200 }
+      )
     }
 
     // Ignore non-text messages
@@ -55,7 +107,10 @@ export async function POST(req: NextRequest) {
         from,
         "Please send the serial code printed on your bottle or scan the QR code with your camera."
       )
-      return NextResponse.json({ status: "unsupported_type" }, { status: 200 })
+      return NextResponse.json(
+        { status: "unsupported_type" },
+        { status: 200 }
+      )
     }
 
     const rawText = message.text?.body?.trim() ?? ""
@@ -66,21 +121,33 @@ export async function POST(req: NextRequest) {
         from,
         "That doesn't look like a valid code. Please scan the QR code on the bottle or type the serial number exactly as printed."
       )
-      return NextResponse.json({ status: "invalid_input" }, { status: 200 })
+      return NextResponse.json(
+        { status: "invalid_input" },
+        { status: 200 }
+      )
     }
 
-    const pendingBottleSerial = pendingBottleScans.get(from)
+    // ── Get pending scan from Redis ───────────────────────────────────────
+    const pendingBottleSerial = await getPendingScan(from)
     const isCapCode = code.length === 16
     const isBottleCode = code.length === 12
 
     if (isCapCode || (pendingBottleSerial && !isBottleCode)) {
       // Step 2 — cap verification (PAIRED mode only reaches here)
+
+      // Check if pending session expired
+      if (!pendingBottleSerial && isCapCode) {
+        // No pending bottle — consumer may have taken too long
+        // Try the cap lookup anyway in case they're scanning
+        // a cap QR directly
+      }
+
       const result = await verifyCap({
         hiddenSerialId: code,
-        bottleSerialId: pendingBottleSerial,
+        bottleSerialId: pendingBottleSerial ?? undefined,
       })
 
-      pendingBottleScans.delete(from)
+      await clearPendingScan(from)
 
       let replyText = ""
 
@@ -113,7 +180,7 @@ export async function POST(req: NextRequest) {
       // Step 1 — bottle verification
       const result = await verifyBottle({ serialId: code })
 
-      // ── SINGLE MODE — immediate result, no cap prompt ──────────────────
+      // ── SINGLE MODE — immediate result ────────────────────────────────
       if (result.status === "GENUINE_SINGLE") {
         await sendMessage(
           from,
@@ -124,22 +191,26 @@ export async function POST(req: NextRequest) {
             "",
             result.message,
             "",
-            `Verified: ${new Date(result.openedAt).toLocaleString("en-NG", {
-              timeZone: "Africa/Lagos",
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}`,
+            `Verified: ${new Date(result.openedAt).toLocaleString(
+              "en-NG",
+              {
+                timeZone: "Africa/Lagos",
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              }
+            )}`,
             "",
             "_Single-scan verification · VerifyChain Africa_",
           ].join("\n")
         )
 
-      // ── PAIRED MODE — prompt cap scan ──────────────────────────────────
+      // ── PAIRED MODE — store in Redis, prompt cap ───────────────────────
       } else if (result.status === "PROMPT_CAP") {
-        pendingBottleScans.set(from, code)
+        await setPendingScan(from, code)
+
         await sendMessage(
           from,
           [
@@ -155,6 +226,7 @@ export async function POST(req: NextRequest) {
             result.topCode
               ? `Top-cap reference code: *${result.topCode}*`
               : "",
+            "⏱ You have 10 minutes to complete this step.",
             "",
             "_VerifyChain Africa_",
           ]
@@ -168,6 +240,7 @@ export async function POST(req: NextRequest) {
           result.authMode === "SINGLE"
             ? "This unit has already been scanned."
             : "This bottle has already been opened and verified."
+
         await sendMessage(
           from,
           [
@@ -175,17 +248,16 @@ export async function POST(req: NextRequest) {
             "",
             modeNote,
             "",
-            `First verified: ${new Date(result.firstScan).toLocaleString(
-              "en-NG",
-              {
-                timeZone: "Africa/Lagos",
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              }
-            )}`,
+            `First verified: ${new Date(
+              result.firstScan
+            ).toLocaleString("en-NG", {
+              timeZone: "Africa/Lagos",
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`,
             "",
             "If you did not scan this product before, do not consume it.",
             "",
@@ -228,14 +300,31 @@ export async function POST(req: NextRequest) {
         } else if (result.status === "FLAGGED") {
           replyText = buildFlaggedMessage(result.reason, code)
         } else if (result.status === "MISMATCH") {
-          replyText = "🚨 Identity mismatch detected. Do not consume."
+          replyText =
+            "🚨 Identity mismatch detected. Do not consume."
         }
-        await sendMessage(from, replyText)
+        if (replyText) await sendMessage(from, replyText)
       } else {
-        await sendMessage(
-          from,
-          "Code not recognised. Please scan the QR code on your bottle or inside the cap."
-        )
+        // Check if their pending session expired
+        if (pendingBottleSerial) {
+          await clearPendingScan(from)
+          await sendMessage(
+            from,
+            [
+              "⏱ *Session Expired*",
+              "",
+              "Your verification session expired after 10 minutes.",
+              "Please scan the bottle QR code again to start over.",
+              "",
+              "_VerifyChain Africa_",
+            ].join("\n")
+          )
+        } else {
+          await sendMessage(
+            from,
+            "Code not recognised. Please scan the QR code on your bottle or inside the cap."
+          )
+        }
       }
     }
 

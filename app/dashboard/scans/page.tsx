@@ -1,16 +1,12 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
-import { formatSerialId } from "@/lib/serial"
-
-const ITEMS_PER_PAGE = 20
 
 export default async function ScansPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; filter?: string }>
+  searchParams: Promise<{ filter?: string; layer?: string }>
 }) {
-  const { page, filter } = await searchParams
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
@@ -19,179 +15,243 @@ export default async function ScansPage({
   })
   if (!manufacturer) redirect("/onboarding")
 
-  const currentPage = parseInt(page ?? "1", 10)
-  const skip = (currentPage - 1) * ITEMS_PER_PAGE
+  const params = await searchParams
+  const filter = params.filter ?? "ALL"
+  const layer = params.layer ?? "ALL"
 
-  const baseWhere = {
-    bottle: { batch: { manufacturerId: manufacturer.id } },
+  const where = {
+    manufacturerId: manufacturer.id,
+    ...(filter === "GENUINE" ? { fraudFlag: false } : {}),
+    ...(filter === "FRAUD" ? { fraudFlag: true } : {}),
+    ...(layer === "BOTTLE" ? { scanLayer: "BOTTLE" as const } : {}),
+    ...(layer === "CAP" ? { scanLayer: "CAP" as const } : {}),
   }
 
-  const filterWhere =
-    filter === "fraud"
-      ? { ...baseWhere, fraudFlag: true }
-      : filter === "genuine"
-      ? { ...baseWhere, fraudFlag: false, scanLayer: "CAP" as const }
-      : filter === "bottle"
-      ? { ...baseWhere, scanLayer: "BOTTLE" as const }
-      : filter === "cap"
-      ? { ...baseWhere, scanLayer: "CAP" as const }
-      : baseWhere
-
-  const [scanLogs, totalCount] = await Promise.all([
-    prisma.scanLog.findMany({
-      where: filterWhere,
-      orderBy: { scannedAt: "desc" },
-      skip,
-      take: ITEMS_PER_PAGE,
-      include: {
-        bottle: {
-          include: {
-            batch: { include: { product: true } },
+  const logs = await prisma.scanLog.findMany({
+    where,
+    orderBy: { scannedAt: "desc" },
+    take: 100,
+    include: {
+      bottle: {
+        include: {
+          batch: {
+            include: {
+              product: { select: { name: true, authMode: true } },
+            },
           },
         },
       },
-    }),
-    prisma.scanLog.count({ where: filterWhere }),
-  ])
+    },
+  })
 
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
+  const FILTER_TABS = [
+    { key: "ALL", label: "All" },
+    { key: "GENUINE", label: "Genuine" },
+    { key: "FRAUD", label: "Fraud" },
+  ]
 
-  const filters = [
-    { label: "All", value: "" },
-    { label: "Genuine", value: "genuine" },
-    { label: "Fraud", value: "fraud" },
-    { label: "Bottle Layer", value: "bottle" },
-    { label: "Cap Layer", value: "cap" },
+  const LAYER_TABS = [
+    { key: "ALL", label: "All Layers" },
+    { key: "BOTTLE", label: "Bottle" },
+    { key: "CAP", label: "Cap" },
   ]
 
   return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
           Scan Logs
         </h2>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-          Every verification event across all your products.
+        <p className="text-sm text-gray-500 mt-1">
+          All verification events for your products.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-5">
-        {filters.map((f) => (
-          <a
-            key={f.value}
-            href={`/dashboard/scans?filter=${f.value}`}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              (filter ?? "") === f.value
-                ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
-                : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400"
-            }`}
-          >
-            {f.label}
-          </a>
-        ))}
-      </div>
-
-      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
-        <div className="px-4 md:px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">
-            {totalCount.toLocaleString()} total scans
-          </p>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          {FILTER_TABS.map((tab) => (
+            <a
+              key={tab.key}
+              href={`/dashboard/scans?filter=${tab.key}&layer=${layer}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                filter === tab.key
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
+            >
+              {tab.label}
+            </a>
+          ))}
         </div>
 
-        {scanLogs.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-gray-400 dark:text-gray-500 text-sm">No scans found.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {scanLogs.map((log) => {
-              if (!log.bottle) return null
-              return (
-                <div key={log.id} className="px-4 md:px-6 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className={`mt-1 shrink-0 w-2 h-2 rounded-full ${
-                        log.fraudFlag ? "bg-red-500" : "bg-green-400"
-                      }`} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {log.bottle.batch.product?.name ?? "No Product"}
-                        </p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">
-                          {formatSerialId(log.bottle.serialId)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {log.fraudFlag && (
-                        <span className="text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded-full">
-                          Fraud
-                        </span>
-                      )}
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                        log.scanLayer === "CAP"
-                          ? "bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400"
-                          : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-                      }`}>
+        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          {LAYER_TABS.map((tab) => (
+            <a
+              key={tab.key}
+              href={`/dashboard/scans?filter=${filter}&layer=${tab.key}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                layer === tab.key
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
+            >
+              {tab.label}
+            </a>
+          ))}
+        </div>
+
+        <span className="text-xs text-gray-400 font-mono ml-1">
+          {logs.length} results
+        </span>
+      </div>
+
+      {/* Scan log table */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-100 dark:border-gray-800">
+              {[
+                "Time",
+                "Product",
+                "Layer",
+                "Channel",
+                "Location",
+                "Result",
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {logs.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-4 py-8 text-center text-sm text-gray-400"
+                >
+                  No scan logs found
+                </td>
+              </tr>
+            ) : (
+              logs.map((log) => {
+                const isPaired =
+                  log.bottle?.batch?.product?.authMode === "PAIRED"
+
+                return (
+                  <tr
+                    key={log.id}
+                    className={`hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors ${
+                      log.fraudFlag
+                        ? "bg-red-50/50 dark:bg-red-500/5"
+                        : ""
+                    }`}
+                  >
+                    {/* Time */}
+                    <td className="px-4 py-3">
+                      <p className="text-xs font-mono text-gray-600 dark:text-gray-400">
+                        {new Date(log.scannedAt).toLocaleDateString(
+                          "en-NG",
+                          {
+                            day: "numeric",
+                            month: "short",
+                          }
+                        )}
+                      </p>
+                      <p className="text-[10px] font-mono text-gray-400">
+                        {new Date(log.scannedAt).toLocaleTimeString(
+                          "en-NG",
+                          {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            timeZone: "Africa/Lagos",
+                          }
+                        )}
+                      </p>
+                    </td>
+
+                    {/* Product */}
+                    <td className="px-4 py-3">
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        {log.bottle?.batch?.product?.name ??
+                          "Unknown"}
+                      </p>
+                      <span
+                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                          isPaired
+                            ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20"
+                            : "bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-500/20"
+                        }`}
+                      >
+                        {isPaired ? "Paired" : "Single"}
+                      </span>
+                    </td>
+
+                    {/* Layer */}
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          log.scanLayer === "BOTTLE"
+                            ? "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700"
+                            : "bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/20"
+                        }`}
+                      >
                         {log.scanLayer}
                       </span>
-                    </div>
-                  </div>
-                  <div className="mt-2 ml-5 flex flex-wrap gap-x-4 gap-y-1">
-<span className="text-xs text-gray-400 dark:text-gray-500">
-  {log.scanLayer === "BOTTLE" ? "Bottle Scan" : "Cap Scan"}
-</span>
-                    {log.lat && log.lng && (
-                      <span className="text-xs text-gray-400 dark:text-gray-500">
-                        {log.lat.toFixed(2)}, {log.lng.toFixed(2)}
-                      </span>
-                    )}
-                    {log.flagReason && (
-                      <span className="text-xs text-red-500 dark:text-red-400">
-                        {log.flagReason}
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-400 dark:text-gray-500">
-                      {new Date(log.scannedAt).toLocaleDateString("en-NG", {
-                        timeZone: "Africa/Lagos",
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+                    </td>
 
-        {totalPages > 1 && (
-          <div className="px-4 md:px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-4">
-            <p className="text-xs text-gray-400 dark:text-gray-500">
-              Page {currentPage} of {totalPages}
-            </p>
-            <div className="flex gap-2">
-              {currentPage > 1 && (
-                <a
-                  href={`/dashboard/scans?page=${currentPage - 1}&filter=${filter ?? ""}`}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400 transition-colors"
-                >
-                  Previous
-                </a>
-              )}
-              {currentPage < totalPages && (
-                <a
-                  href={`/dashboard/scans?page=${currentPage + 1}&filter=${filter ?? ""}`}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400 transition-colors"
-                >
-                  Next
-                </a>
-              )}
-            </div>
-          </div>
-        )}
+                    {/* Channel */}
+                    <td className="px-4 py-3">
+                      <span className="text-[10px] font-mono text-gray-500">
+                        {log.channel === "whatsapp" ? (
+                          <span className="text-green-600 dark:text-green-400">
+                            WhatsApp
+                          </span>
+                        ) : log.channel ? (
+                          log.channel
+                        ) : (
+                          "Direct QR"
+                        )}
+                      </span>
+                    </td>
+
+                    {/* Location */}
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-gray-500">
+                        {log.region ?? "—"}
+                      </span>
+                    </td>
+
+                    {/* Result */}
+                    <td className="px-4 py-3">
+                      {log.fraudFlag ? (
+                        <div>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded border bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/20">
+                            Fraud
+                          </span>
+                          {log.flagReason && (
+                            <p className="text-[9px] text-red-400 mt-0.5 max-w-[140px] truncate">
+                              {log.flagReason}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded border bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-500/20">
+                          Genuine
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )

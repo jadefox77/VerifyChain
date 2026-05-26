@@ -391,11 +391,8 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
   })
 
   // Group by channel
-  const byChannel: Record
-    string,
-    typeof recentScans
-  > = {}
-
+  const byChannel: Record<string, typeof recentScans> = {}
+  
   for (const scan of recentScans) {
     if (!scan.channel) continue
     if (!byChannel[scan.channel]) byChannel[scan.channel] = []

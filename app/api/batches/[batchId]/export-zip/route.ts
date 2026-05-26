@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { NextRequest } from "next/server"
 import QRCode from "qrcode"
 import JSZip from "jszip"
-import { makeBatchZipName } from "@/lib/actions/batches"
+import { makeBatchZipName } from "@/lib/batch-naming"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://verifychain-africa.vercel.app"
 

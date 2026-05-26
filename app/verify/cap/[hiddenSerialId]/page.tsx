@@ -17,20 +17,26 @@ export default async function CapVerifyPage({
     ? await verifyCap({ hiddenSerialId, bottleSerialId: bottle })
     : {
         status: "NOT_FOUND" as const,
-        message: "Invalid or tampered QR code. This product may be counterfeit.",
+        message:
+          "Invalid or tampered QR code. This product may be counterfeit.",
       }
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-
+        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-10 h-10 bg-gray-900 dark:bg-white rounded-xl mb-3">
-            <span className="text-white dark:text-gray-900 text-lg font-bold">V</span>
+            <span className="text-white dark:text-gray-900 text-lg font-bold">
+              V
+            </span>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">VerifyChain Africa</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            VerifyChain Africa
+          </p>
         </div>
 
+        {/* GENUINE */}
         {result.status === "GENUINE" && (
           <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-2xl p-8 text-center">
             <div className="text-5xl mb-4">✅</div>
@@ -68,6 +74,7 @@ export default async function CapVerifyPage({
           </div>
         )}
 
+        {/* WARNING — already opened */}
         {result.status === "WARNING" && (
           <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-2xl p-8 text-center">
             <div className="text-5xl mb-4">⚠️</div>
@@ -101,6 +108,7 @@ export default async function CapVerifyPage({
           </div>
         )}
 
+        {/* MISMATCH */}
         {result.status === "MISMATCH" && (
           <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl p-8 text-center">
             <div className="text-5xl mb-4">🚨</div>
@@ -113,6 +121,7 @@ export default async function CapVerifyPage({
           </div>
         )}
 
+        {/* FLAGGED */}
         {result.status === "FLAGGED" && (
           <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl p-8 text-center">
             <div className="text-5xl mb-4">🚨</div>
@@ -125,6 +134,7 @@ export default async function CapVerifyPage({
           </div>
         )}
 
+        {/* NOT FOUND */}
         {result.status === "NOT_FOUND" && (
           <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 text-center">
             <div className="text-5xl mb-4">❌</div>

@@ -1,9 +1,25 @@
 import { requireAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
-import { Cpu, Package, AlertTriangle, TrendingUp, Building2, ChevronRight } from "lucide-react"
+import {
+  Cpu,
+  Package,
+  AlertTriangle,
+  TrendingUp,
+  Building2,
+  ChevronRight,
+  CheckCircle2,
+  Layers,
+} from "lucide-react"
 import Link from "next/link"
 
 export const revalidate = 30
+
+const PLAN_LIMITS: Record<string, number> = {
+  FREE: 5000,
+  STARTER: 50000,
+  PROFESSIONAL: 500000,
+  ENTERPRISE: Infinity,
+}
 
 async function getSerializationMetrics() {
   const today = new Date()
@@ -13,104 +29,72 @@ async function getSerializationMetrics() {
   thisMonthStart.setDate(1)
   thisMonthStart.setHours(0, 0, 0, 0)
 
-  const [
-    totalAllTime,
-    totalToday,
-    totalThisMonth,
-    totalCaps,
-    flaggedBottles,
-    batchesToday,
-    batchesThisMonth,
-    manufacturerBreakdown,
-    recentBatches,
-    dailyThroughput,
-  ] = await Promise.all([
-    // Total bottles ever serialized
+  // Batch 1
+  const [totalAllTime, totalToday, totalThisMonth] = await Promise.all([
     prisma.bottle.count(),
-
-    // Serialized today
-    prisma.bottle.count({
-      where: { createdAt: { gte: today } },
-    }),
-
-    // Serialized this month
-    prisma.bottle.count({
-      where: { createdAt: { gte: thisMonthStart } },
-    }),
-
-    // Total caps generated
-    prisma.cap.count(),
-
-    // Flagged bottles — serialization integrity issues
-    prisma.bottle.count({
-      where: { status: "FLAGGED" },
-    }),
-
-    // Batches generated today
-    prisma.batch.count({
-      where: { createdAt: { gte: today } },
-    }),
-
-    // Batches this month
-    prisma.batch.count({
-      where: { createdAt: { gte: thisMonthStart } },
-    }),
-
-    // Per-manufacturer serialization breakdown
-    prisma.manufacturer.findMany({
-      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-      select: {
-        id: true,
-        companyName: true,
-        totalBottlesGenerated: true,
-        subscriptionPlan: true,
-        estimatedBottlesPerMonth: true,
-        _count: {
-          select: { batches: true, bottles: true },
-        },
-      },
-      orderBy: { totalBottlesGenerated: "desc" },
-      take: 10,
-    }),
-
-    // Recent batch generation activity
-    prisma.batch.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      select: {
-        id: true,
-        batchCode: true,
-        bottleCount: true,
-        createdAt: true,
-        targetRegion: true,
-        manufacturer: {
-          select: { id: true, companyName: true },
-        },
-        product: {
-          select: { name: true },
-        },
-      },
-    }),
-
-    // Daily throughput — last 7 days
-    Promise.all(
-      Array.from({ length: 7 }, (_, i) => {
-        const day = new Date()
-        day.setDate(day.getDate() - (6 - i))
-        day.setHours(0, 0, 0, 0)
-        const next = new Date(day)
-        next.setDate(next.getDate() + 1)
-        return prisma.bottle
-          .count({ where: { createdAt: { gte: day, lt: next } } })
-          .then((count) => ({ day, count }))
-      })
-    ),
+    prisma.bottle.count({ where: { createdAt: { gte: today } } }),
+    prisma.bottle.count({ where: { createdAt: { gte: thisMonthStart } } }),
   ])
 
-  // Pairing integrity check — bottles without caps
-  const bottlesWithoutCaps = await prisma.bottle.count({
-    where: { cap: null },
-  })
+  // Batch 2
+  const [totalCaps, flaggedBottles, bottlesWithoutCaps] = await Promise.all([
+    prisma.cap.count(),
+    prisma.bottle.count({ where: { status: "FLAGGED" } }),
+    prisma.bottle.count({ where: { cap: null } }),
+  ])
+
+  // Batch 3
+  const [batchesToday, batchesThisMonth, pairedProducts] = await Promise.all([
+    prisma.batch.count({ where: { createdAt: { gte: today } } }),
+    prisma.batch.count({ where: { createdAt: { gte: thisMonthStart } } }),
+    prisma.product.count({ where: { authMode: "PAIRED" } }),
+  ])
+
+  // Batch 4
+  const [singleProducts, manufacturerBreakdown, recentBatches] =
+    await Promise.all([
+      prisma.product.count({ where: { authMode: "SINGLE" } }),
+      prisma.manufacturer.findMany({
+        where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+        select: {
+          id: true,
+          companyName: true,
+          totalBottlesGenerated: true,
+          subscriptionPlan: true,
+          estimatedBottlesPerMonth: true,
+          _count: { select: { batches: true, bottles: true } },
+        },
+        orderBy: { totalBottlesGenerated: "desc" },
+        take: 10,
+      }),
+      prisma.batch.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          batchCode: true,
+          bottleCount: true,
+          createdAt: true,
+          targetRegion: true,
+          manufacturer: { select: { id: true, companyName: true } },
+          product: { select: { name: true, authMode: true } },
+        },
+      }),
+    ])
+
+  // Daily throughput — sequential loop
+  const dailyThroughput: { day: Date; count: number }[] = []
+  for (let i = 0; i < 7; i++) {
+    const day = new Date()
+    day.setDate(day.getDate() - (6 - i))
+    day.setHours(0, 0, 0, 0)
+    const next = new Date(day)
+    next.setDate(next.getDate() + 1)
+    const count = await prisma.bottle.count({
+      where: { createdAt: { gte: day, lt: next } },
+    })
+    dailyThroughput.push({ day, count })
+  }
 
   return {
     totalAllTime,
@@ -118,31 +102,32 @@ async function getSerializationMetrics() {
     totalThisMonth,
     totalCaps,
     flaggedBottles,
+    bottlesWithoutCaps,
     batchesToday,
     batchesThisMonth,
+    pairedProducts,
+    singleProducts,
     manufacturerBreakdown,
     recentBatches,
     dailyThroughput,
-    bottlesWithoutCaps,
     pairingIntegrity:
       totalAllTime > 0
-        ? (((totalAllTime - bottlesWithoutCaps) / totalAllTime) * 100).toFixed(2)
+        ? (
+            ((totalAllTime - bottlesWithoutCaps) / totalAllTime) *
+            100
+          ).toFixed(2)
         : "100.00",
   }
 }
 
-const PLAN_LIMITS: Record<string, number> = {
-  FREE: 5000,
-  STARTER: 50000,
-  PROFESSIONAL: 500000,
-  ENTERPRISE: Infinity,
-}
-
-export default async function SerializationMonitorPage() {
+export default async function SerializationPage() {
   await requireAdmin()
   const metrics = await getSerializationMetrics()
 
-  const maxDailyCount = Math.max(...metrics.dailyThroughput.map((d) => d.count), 1)
+  const maxDaily = Math.max(
+    ...metrics.dailyThroughput.map((d) => d.count),
+    1
+  )
 
   const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
   const todayIndex = new Date().getDay()
@@ -154,22 +139,31 @@ export default async function SerializationMonitorPage() {
   return (
     <div className="p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-bold text-white tracking-tight">
-          Serialization Monitor
-        </h1>
-        <p className="text-xs text-gray-500 font-mono mt-0.5">
-          Platform-wide identity generation and pairing integrity
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-white tracking-tight">
+            Serialization Engine
+          </h1>
+          <p className="text-xs text-gray-500 font-mono mt-0.5">
+            Identity generation · Cap pairing · Export management
+          </p>
+        </div>
+        <Link
+          href="/admin/serialization/pairing"
+          className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-mono hover:bg-blue-500/20 transition-colors"
+        >
+          <Cpu className="w-3.5 h-3.5" />
+          Production Pairing Monitor
+        </Link>
       </div>
 
-      {/* Core metrics */}
+      {/* Primary metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           {
             label: "Total Serialized",
             value: metrics.totalAllTime.toLocaleString(),
-            sub: "All time — all manufacturers",
+            sub: "All time",
             icon: Cpu,
             accent: "text-blue-400",
             border: "border-gray-800/60",
@@ -177,17 +171,9 @@ export default async function SerializationMonitorPage() {
           {
             label: "Serialized Today",
             value: metrics.totalToday.toLocaleString(),
-            sub: `${metrics.batchesToday} batch${metrics.batchesToday !== 1 ? "es" : ""} generated`,
+            sub: `${metrics.batchesToday} batches`,
             icon: TrendingUp,
             accent: "text-green-400",
-            border: "border-gray-800/60",
-          },
-          {
-            label: "This Month",
-            value: metrics.totalThisMonth.toLocaleString(),
-            sub: `${metrics.batchesThisMonth} batches`,
-            icon: Package,
-            accent: "text-purple-400",
             border: "border-gray-800/60",
           },
           {
@@ -195,8 +181,8 @@ export default async function SerializationMonitorPage() {
             value: `${metrics.pairingIntegrity}%`,
             sub:
               metrics.bottlesWithoutCaps > 0
-                ? `${metrics.bottlesWithoutCaps} bottles unpaired`
-                : "All bottles paired",
+                ? `${metrics.bottlesWithoutCaps} unpaired`
+                : "All paired",
             icon: AlertTriangle,
             accent:
               metrics.bottlesWithoutCaps > 0
@@ -206,6 +192,14 @@ export default async function SerializationMonitorPage() {
               metrics.bottlesWithoutCaps > 0
                 ? "border-red-500/20"
                 : "border-gray-800/60",
+          },
+          {
+            label: "This Month",
+            value: metrics.totalThisMonth.toLocaleString(),
+            sub: `${metrics.batchesThisMonth} batches`,
+            icon: Package,
+            accent: "text-purple-400",
+            border: "border-gray-800/60",
           },
         ].map((card) => (
           <div
@@ -228,38 +222,46 @@ export default async function SerializationMonitorPage() {
         ))}
       </div>
 
-      {/* Secondary metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Auth mode breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {[
+          {
+            label: "Paired Mode Products",
+            value: metrics.pairedProducts,
+            sub: "Bottle + Hidden Cap QR",
+            color: "text-blue-400",
+            border: "border-blue-500/20",
+            bg: "bg-blue-500/5",
+          },
+          {
+            label: "Single Mode Products",
+            value: metrics.singleProducts,
+            sub: "One QR per unit",
+            color: "text-green-400",
+            border: "border-green-500/20",
+            bg: "bg-green-500/5",
+          },
           {
             label: "Total Caps Generated",
             value: metrics.totalCaps.toLocaleString(),
-          },
-          {
-            label: "Flagged Bottles",
-            value: metrics.flaggedBottles.toLocaleString(),
-          },
-          {
-            label: "Bottles Without Caps",
-            value: metrics.bottlesWithoutCaps.toLocaleString(),
-          },
-          {
-            label: "Cap / Bottle Ratio",
-            value:
-              metrics.totalAllTime > 0
-                ? (metrics.totalCaps / metrics.totalAllTime).toFixed(3)
-                : "—",
+            sub: `${metrics.flaggedBottles} flagged bottles`,
+            color: "text-purple-400",
+            border: "border-purple-500/20",
+            bg: "bg-purple-500/5",
           },
         ].map((card) => (
           <div
             key={card.label}
-            className="bg-gray-900/40 border border-gray-800/40 rounded-xl p-3"
+            className={`border rounded-xl p-4 ${card.border} ${card.bg}`}
           >
-            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-1">
+            <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-1">
               {card.label}
             </p>
-            <p className="text-lg font-bold font-mono text-gray-300">
+            <p className={`text-2xl font-bold font-mono ${card.color}`}>
               {card.value}
+            </p>
+            <p className="text-[10px] text-gray-600 font-mono mt-1">
+              {card.sub}
             </p>
           </div>
         ))}
@@ -270,20 +272,24 @@ export default async function SerializationMonitorPage() {
         {/* Daily throughput */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
           <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
-            Daily Serialization Throughput — Last 7 Days
+            Daily Throughput — Last 7 Days
           </h2>
-
           <div className="flex items-end gap-2 h-36">
             {metrics.dailyThroughput.map(({ count }, i) => {
-              const heightPct = Math.max((count / maxDailyCount) * 100, 2)
+              const heightPct = Math.max(
+                (count / maxDaily) * 100,
+                count > 0 ? 2 : 0
+              )
               return (
                 <div
                   key={i}
                   className="flex-1 flex flex-col items-center gap-1"
                 >
-                  <span className="text-[9px] font-mono text-gray-600">
-                    {count > 0 ? count.toLocaleString() : ""}
-                  </span>
+                  {count > 0 && (
+                    <span className="text-[9px] font-mono text-gray-600">
+                      {count.toLocaleString()}
+                    </span>
+                  )}
                   <div className="w-full flex flex-col justify-end h-28">
                     <div
                       className="w-full bg-blue-500/40 rounded-t-sm hover:bg-blue-500/60 transition-colors"
@@ -298,14 +304,12 @@ export default async function SerializationMonitorPage() {
               )
             })}
           </div>
-
           <div className="mt-3 pt-3 border-t border-gray-800/40 flex justify-between">
             <span className="text-[10px] font-mono text-gray-600">
-              Total this week:{" "}
+              Week total:{" "}
               {metrics.dailyThroughput
                 .reduce((s, d) => s + d.count, 0)
-                .toLocaleString()}{" "}
-              bottles
+                .toLocaleString()}
             </span>
             <span className="text-[10px] font-mono text-gray-600">
               Peak:{" "}
@@ -316,7 +320,7 @@ export default async function SerializationMonitorPage() {
           </div>
         </div>
 
-        {/* Recent batch activity */}
+        {/* Recent batches */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl">
           <div className="px-4 py-3 border-b border-gray-800/60">
             <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
@@ -327,56 +331,69 @@ export default async function SerializationMonitorPage() {
             {metrics.recentBatches.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <p className="text-xs text-gray-600 font-mono">
-                  No batches generated yet
+                  No batches yet
                 </p>
               </div>
             ) : (
-              metrics.recentBatches.map((batch) => (
-                <div
-                  key={batch.id}
-                  className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-800/20 transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-gray-300">
-                        {batch.batchCode}
-                      </span>
-                      {batch.targetRegion && (
-                        <span className="text-[9px] font-mono text-gray-600 border border-gray-800 rounded px-1">
-                          {batch.targetRegion}
+              metrics.recentBatches.map((batch) => {
+                const isPaired =
+                  batch.product?.authMode === "PAIRED"
+                return (
+                  <div
+                    key={batch.id}
+                    className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-800/20 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-gray-300">
+                          {batch.batchCode}
                         </span>
-                      )}
+                        <span
+                          className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                            isPaired
+                              ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                              : "bg-green-500/10 text-green-400 border-green-500/20"
+                          }`}
+                        >
+                          {isPaired ? "Paired" : "Single"}
+                        </span>
+                        {batch.targetRegion && (
+                          <span className="text-[9px] font-mono text-gray-600 border border-gray-800 rounded px-1">
+                            {batch.targetRegion}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Building2 className="w-3 h-3 text-gray-700" />
+                        <span className="text-[10px] text-gray-600 truncate">
+                          {batch.manufacturer.companyName}
+                        </span>
+                        <span className="text-gray-700">·</span>
+                        <span className="text-[10px] text-gray-600">
+                          {batch.product?.name ?? "No product"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Building2 className="w-3 h-3 text-gray-700" />
-                      <span className="text-[10px] text-gray-600 truncate">
-                        {batch.manufacturer.companyName}
-                      </span>
-                      <span className="text-gray-700">·</span>
-                      <span className="text-[10px] text-gray-600">
-                        {batch.product?.name ?? "No product"}
-                      </span>
+                    <div className="text-right shrink-0 ml-3">
+                      <p className="text-xs font-mono text-blue-400">
+                        {batch.bottleCount.toLocaleString()}
+                      </p>
+                      <p className="text-[9px] font-mono text-gray-600">
+                        {new Date(batch.createdAt).toLocaleDateString(
+                          "en-NG",
+                          { day: "numeric", month: "short" }
+                        )}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right shrink-0 ml-3">
-                    <p className="text-xs font-mono text-blue-400">
-                      {batch.bottleCount.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] font-mono text-gray-600">
-                      {new Date(batch.createdAt).toLocaleDateString("en-NG", {
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </p>
-                  </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>
       </div>
 
-      {/* Per-manufacturer breakdown */}
+      {/* Manufacturer breakdown table */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/60">
           <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
@@ -390,8 +407,8 @@ export default async function SerializationMonitorPage() {
                 "Manufacturer",
                 "Plan",
                 "Total Bottles",
-                "Total Batches",
-                "Monthly Estimate",
+                "Batches",
+                "Est. Monthly",
                 "Plan Usage",
                 "",
               ].map((h) => (

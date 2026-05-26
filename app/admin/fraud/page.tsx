@@ -11,6 +11,8 @@ import {
   Bot,
   GitFork,
 } from "lucide-react"
+import { FraudPipelineTrigger } from "@/components/admin/fraud-pipeline-trigger"
+
 
 export const revalidate = 30
 
@@ -263,14 +265,17 @@ const regional = await getRegionalBreakdown()
   return (
     <div className="p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-bold text-white tracking-tight">
-          Fraud Intelligence Center
-        </h1>
-        <p className="text-xs text-gray-500 font-mono mt-0.5">
-          Platform-wide threat monitoring · Last 30 days
-        </p>
-      </div>
+      <div className="flex items-start justify-between">
+  <div>
+    <h1 className="text-lg font-bold text-white tracking-tight">
+      Fraud Intelligence Center
+    </h1>
+    <p className="text-xs text-gray-500 font-mono mt-0.5">
+      Platform-wide threat monitoring · Last 30 days · Runs hourly
+    </p>
+  </div>
+  <FraudPipelineTrigger />
+</div>
 
       {/* Threat level summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

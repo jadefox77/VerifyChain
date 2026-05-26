@@ -69,17 +69,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "invalid_input" }, { status: 200 })
     }
 
-    const phoneHash = crypto
-      .createHash("sha256")
-      .update(from)
-      .digest("hex")
-
     const pendingBottleSerial = pendingBottleScans.get(from)
     const isCapCode = code.length === 16
     const isBottleCode = code.length === 12
 
     if (isCapCode || (pendingBottleSerial && !isBottleCode)) {
-      // Step 2 — cap verification
+      // Step 2 — cap verification (PAIRED mode only reaches here)
       const result = await verifyCap({
         hiddenSerialId: code,
         bottleSerialId: pendingBottleSerial,
@@ -92,7 +87,11 @@ export async function POST(req: NextRequest) {
       if (result.status === "GENUINE") {
         replyText = buildGenuineMessage(result.productName, code)
       } else if (result.status === "WARNING") {
-        replyText = buildWarningMessage(result.firstOpened, result.firstLocation, code)
+        replyText = buildWarningMessage(
+          result.firstOpened,
+          result.firstLocation,
+          code
+        )
       } else if (result.status === "MISMATCH") {
         replyText = [
           "🚨 *IDENTITY MISMATCH*",
@@ -110,12 +109,36 @@ export async function POST(req: NextRequest) {
       }
 
       await sendMessage(from, replyText)
-
     } else if (isBottleCode) {
       // Step 1 — bottle verification
       const result = await verifyBottle({ serialId: code })
 
-      if (result.status === "PROMPT_CAP") {
+      // ── SINGLE MODE — immediate result, no cap prompt ──────────────────
+      if (result.status === "GENUINE_SINGLE") {
+        await sendMessage(
+          from,
+          [
+            "✅ *GENUINE PRODUCT CONFIRMED*",
+            "",
+            `*${result.productName}* has been verified authentic.`,
+            "",
+            result.message,
+            "",
+            `Verified: ${new Date(result.openedAt).toLocaleString("en-NG", {
+              timeZone: "Africa/Lagos",
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`,
+            "",
+            "_Single-scan verification · VerifyChain Africa_",
+          ].join("\n")
+        )
+
+      // ── PAIRED MODE — prompt cap scan ──────────────────────────────────
+      } else if (result.status === "PROMPT_CAP") {
         pendingBottleScans.set(from, code)
         await sendMessage(
           from,
@@ -129,23 +152,65 @@ export async function POST(req: NextRequest) {
             "2. Look inside the cap for a hidden QR code",
             "3. Scan that QR code or type the code here",
             "",
-            result.topCode ? `Top-cap reference code: *${result.topCode}*` : "",
+            result.topCode
+              ? `Top-cap reference code: *${result.topCode}*`
+              : "",
             "",
             "_VerifyChain Africa_",
           ]
             .filter(Boolean)
             .join("\n")
         )
-      } else if (result.status === "CAP_ALREADY_OPENED") {
-        await sendMessage(from, buildCapAlreadyOpenedMessage(result.capOpenedAt, code))
+
+      // ── ALREADY VERIFIED ───────────────────────────────────────────────
       } else if (result.status === "ALREADY_VERIFIED") {
-        await sendMessage(from, buildAlreadyVerifiedMessage(result.firstScan, code))
+        const modeNote =
+          result.authMode === "SINGLE"
+            ? "This unit has already been scanned."
+            : "This bottle has already been opened and verified."
+        await sendMessage(
+          from,
+          [
+            "⚠️ *ALREADY VERIFIED*",
+            "",
+            modeNote,
+            "",
+            `First verified: ${new Date(result.firstScan).toLocaleString(
+              "en-NG",
+              {
+                timeZone: "Africa/Lagos",
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              }
+            )}`,
+            "",
+            "If you did not scan this product before, do not consume it.",
+            "",
+            "_VerifyChain Africa_",
+          ].join("\n")
+        )
+
+      // ── CAP ALREADY OPENED ─────────────────────────────────────────────
+      } else if (result.status === "CAP_ALREADY_OPENED") {
+        await sendMessage(
+          from,
+          buildCapAlreadyOpenedMessage(result.capOpenedAt, code)
+        )
+
+      // ── FLAGGED ────────────────────────────────────────────────────────
       } else if (result.status === "FLAGGED") {
-        await sendMessage(from, buildFlaggedMessage("Previously flagged", code))
+        await sendMessage(
+          from,
+          buildFlaggedMessage("Previously flagged", code)
+        )
+
+      // ── NOT FOUND ──────────────────────────────────────────────────────
       } else {
         await sendMessage(from, buildNotFoundMessage(code))
       }
-
     } else {
       // Unknown code length — try cap lookup first, then give up
       const result = await verifyCap({ hiddenSerialId: code })
@@ -155,7 +220,11 @@ export async function POST(req: NextRequest) {
         if (result.status === "GENUINE") {
           replyText = buildGenuineMessage(result.productName, code)
         } else if (result.status === "WARNING") {
-          replyText = buildWarningMessage(result.firstOpened, result.firstLocation, code)
+          replyText = buildWarningMessage(
+            result.firstOpened,
+            result.firstLocation,
+            code
+          )
         } else if (result.status === "FLAGGED") {
           replyText = buildFlaggedMessage(result.reason, code)
         } else if (result.status === "MISMATCH") {

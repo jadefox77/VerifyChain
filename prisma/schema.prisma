@@ -94,6 +94,10 @@ enum ScanLayer {
   CAP    // Hidden internal cap QR scan
 }
 
+enum AuthMode {
+  PAIRED  // Bottle QR + Hidden Cap QR — bottles, jars, spirits
+  SINGLE  // Single QR only — cans, sachets, cartons, pouches
+}
 // =============================================================================
 // USER
 // =============================================================================
@@ -196,7 +200,8 @@ model Product {
   volumeMl    Int?
   description String?
   active      Boolean @default(true)
-
+  authMode AuthMode @default(PAIRED)
+  
   batches Batch[]
 
   createdAt DateTime @default(now())

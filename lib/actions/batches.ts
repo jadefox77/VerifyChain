@@ -10,6 +10,38 @@ import {
 import { redirect } from "next/navigation"
 import crypto from "crypto"
 
+// ── Naming utility ────────────────────────────────────────────────────────────
+
+export function makeManufacturerCode(companyName: string): string {
+  return companyName
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase()
+    .slice(0, 6)
+}
+
+export function makeBatchZipName(
+  companyName: string,
+  productName: string,
+  batchCode: string
+): string {
+  const mfr = makeManufacturerCode(companyName)
+  const product = productName
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 12)
+  const date = new Date().toISOString().split("T")[0]
+  return `VC_${mfr}_${product}_${batchCode}_${date}`
+}
+
+export function makeCsvName(
+  companyName: string,
+  productName: string,
+  batchCode: string
+): string {
+  return `${makeBatchZipName(companyName, productName, batchCode)}_serials.csv`
+}
+
+// ── Batch generation ──────────────────────────────────────────────────────────
+
 export async function generateBatch(formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
@@ -31,6 +63,12 @@ export async function generateBatch(formData: FormData) {
   })
   if (!product) return
 
+  // Generate a structured batch code
+  const mfrCode = makeManufacturerCode(manufacturer.companyName)
+  const date = new Date().toISOString().split("T")[0].replace(/-/g, "")
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+  const batchCode = `VC-${mfrCode}-${date}-${random}`
+
   // Create the batch
   const batch = await prisma.batch.create({
     data: {
@@ -39,11 +77,11 @@ export async function generateBatch(formData: FormData) {
       bottleCount: quantity,
       notes: notes || null,
       targetRegion: targetRegion || null,
-      batchCode: `BATCH-${Date.now()}`,
+      batchCode,
     },
   })
 
-  // Generate bottles with all required fields
+  // Generate bottles
   const bottlesData = Array.from({ length: quantity }, () => {
     const serialId = generateSerialId()
     return {
@@ -59,27 +97,28 @@ export async function generateBatch(formData: FormData) {
 
   await prisma.bottle.createMany({ data: bottlesData })
 
-  // Fetch created bottles to get their IDs
-  const bottles = await prisma.bottle.findMany({
-    where: { batchId: batch.id },
-    select: { id: true },
-  })
+  // Only generate caps for PAIRED mode products
+  if (product.authMode === "PAIRED") {
+    const bottles = await prisma.bottle.findMany({
+      where: { batchId: batch.id },
+      select: { id: true },
+    })
 
-  // Create caps with all required fields including hiddenHmacSig
-  const capsData = bottles.map((bottle) => {
-    const hiddenSerialId = generateHiddenSerialId()
-    return {
-      bottleId: bottle.id,
-      topCode: generateTopCapCode(),
-      hiddenSerialId,
-      hiddenHmacSig: crypto
-        .createHmac("sha256", process.env.QR_SECRET!)
-        .update(hiddenSerialId)
-        .digest("hex"),
-    }
-  })
+    const capsData = bottles.map((bottle) => {
+      const hiddenSerialId = generateHiddenSerialId()
+      return {
+        bottleId: bottle.id,
+        topCode: generateTopCapCode(),
+        hiddenSerialId,
+        hiddenHmacSig: crypto
+          .createHmac("sha256", process.env.QR_SECRET!)
+          .update(hiddenSerialId)
+          .digest("hex"),
+      }
+    })
 
-  await prisma.cap.createMany({ data: capsData })
+    await prisma.cap.createMany({ data: capsData })
+  }
 
   redirect(`/dashboard/batches/${batch.id}`)
 }

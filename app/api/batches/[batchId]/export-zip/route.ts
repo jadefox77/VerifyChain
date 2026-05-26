@@ -1,25 +1,28 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { formatSerialId, buildVerifyUrl, buildCapVerifyUrl } from "@/lib/serial"
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import QRCode from "qrcode"
 import JSZip from "jszip"
+import { makeBatchZipName } from "@/lib/actions/batches"
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://verifychain-africa.vercel.app"
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ batchId: string }> }
 ) {
-  const { batchId } = await params
   const session = await auth()
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  const { batchId } = await params
 
   const manufacturer = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },
   })
   if (!manufacturer) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return Response.json({ error: "Not found" }, { status: 404 })
   }
 
   const batch = await prisma.batch.findFirst({
@@ -27,80 +30,104 @@ export async function GET(
     include: {
       product: true,
       bottles: {
-        orderBy: { createdAt: "asc" },
         include: { cap: true },
       },
     },
   })
 
   if (!batch) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return Response.json({ error: "Batch not found" }, { status: 404 })
   }
+
+  const productName = batch.product?.name ?? "NoProduct"
+  const authMode = batch.product?.authMode ?? "PAIRED"
+  const baseName = makeBatchZipName(
+    manufacturer.companyName,
+    productName,
+    batch.batchCode
+  )
 
   const zip = new JSZip()
 
-  // Two folders — one for bottle label QRs, one for hidden cap QRs
-  const bottleFolder = zip.folder(`batch-${batchId}/bottle-qr`)!
-  const capFolder = zip.folder(`batch-${batchId}/cap-qr`)!
+  if (authMode === "SINGLE") {
+    // Single mode — one folder, one QR per unit
+    const folder = zip.folder("product-qr")!
 
-  for (const bottle of batch.bottles) {
-    // Bottle label QR
-    const bottleUrl = buildVerifyUrl(bottle.serialId)
-    const bottleQr = await QRCode.toBuffer(bottleUrl, {
-      type: "png",
-      width: 300,
-      margin: 2,
-      errorCorrectionLevel: "H",
-    })
-    const bottleFileName = `${formatSerialId(bottle.serialId)}.png`
-    bottleFolder.file(bottleFileName, bottleQr)
-
-    // Hidden cap QR
-    if (bottle.cap) {
-      const capUrl = buildCapVerifyUrl(bottle.cap.hiddenSerialId)
-      const capQr = await QRCode.toBuffer(capUrl, {
-        type: "png",
-        width: 300,
-        margin: 2,
+    for (const bottle of batch.bottles) {
+      const url = `${APP_URL}/verify/${bottle.serialId}`
+      const qr = await QRCode.toBuffer(url, {
         errorCorrectionLevel: "H",
+        width: 400,
+        margin: 2,
       })
-      // Named by top-cap code so printers can match them easily
-      const capFileName = `${formatSerialId(bottle.cap.topCode)}.png`
-      capFolder.file(capFileName, capQr)
+      folder.file(`PRODUCT_${bottle.serialId}.png`, qr)
+    }
+  } else {
+    // Paired mode — two folders
+    const bottleFolder = zip.folder("bottle-qr")!
+    const capFolder = zip.folder("cap-qr")!
+
+    for (const bottle of batch.bottles) {
+      // Bottle QR
+      const bottleUrl = `${APP_URL}/verify/${bottle.serialId}`
+      const bottleQr = await QRCode.toBuffer(bottleUrl, {
+        errorCorrectionLevel: "H",
+        width: 400,
+        margin: 2,
+      })
+      bottleFolder.file(`BOTTLE_${bottle.serialId}.png`, bottleQr)
+
+      // Cap QR (hidden internal)
+      if (bottle.cap) {
+        const capUrl = `${APP_URL}/verify/cap/${bottle.cap.hiddenSerialId}`
+        const capQr = await QRCode.toBuffer(capUrl, {
+          errorCorrectionLevel: "H",
+          width: 400,
+          margin: 2,
+        })
+        capFolder.file(`CAP_${bottle.cap.hiddenSerialId}.png`, capQr)
+      }
     }
   }
 
-  // Reference CSV inside the ZIP
-  const csvRows = [
-    [
-      "Bottle Serial",
-      "Bottle QR URL",
-      "Top Cap Code",
-      "Hidden Cap Serial",
-      "Hidden Cap QR URL",
-      "Status",
-    ],
-    ...batch.bottles.map((b) => [
-      b.serialId,
-      buildVerifyUrl(b.serialId),
-      b.cap?.topCode ?? "",
-      b.cap?.hiddenSerialId ?? "",
-      b.cap ? buildCapVerifyUrl(b.cap.hiddenSerialId) : "",
-      b.status,
-    ]),
+  // Add README inside ZIP
+  const readmeLines = [
+    `VerifyChain Africa — Batch Export`,
+    `═══════════════════════════════════`,
+    `Manufacturer : ${manufacturer.companyName}`,
+    `Product      : ${productName}`,
+    `Batch Code   : ${batch.batchCode}`,
+    `Auth Mode    : ${authMode}`,
+    `Units        : ${batch.bottles.length}`,
+    `Region       : ${batch.targetRegion ?? "Not specified"}`,
+    `Generated    : ${new Date().toISOString()}`,
+    ``,
+    authMode === "SINGLE"
+      ? [
+          `SINGLE MODE INSTRUCTIONS`,
+          `────────────────────────`,
+          `Each QR in /product-qr/ goes on one unit of packaging.`,
+          `Consumer scans once and gets immediate verification result.`,
+          `No cap scanning required.`,
+        ].join("\n")
+      : [
+          `PAIRED MODE INSTRUCTIONS`,
+          `────────────────────────`,
+          `/bottle-qr/  → Print on bottle label (consumer-visible)`,
+          `/cap-qr/     → Print inside bottle cap (hidden until opened)`,
+          `Each BOTTLE_xxx.png is paired with its CAP_xxx.png.`,
+          `Do not mix QR codes across units.`,
+        ].join("\n"),
   ]
-  const csv = csvRows.map((r) => r.join(",")).join("\n")
-  zip.file(`batch-${batchId}/serials.csv`, csv)
 
-  const zipBuffer = await zip.generateAsync({ type: "uint8array" })
-  const blob = new Blob([zipBuffer.buffer as ArrayBuffer], {
-    type: "application/zip",
-  })
+  zip.file("README.txt", readmeLines.join("\n"))
 
-  return new NextResponse(blob, {
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="batch-${batchId}.zip"`,
-    },
-  })
+  const zipBuffer = await zip.generateAsync({ type: "nodebuffer" })
+
+  return new Response(new Uint8Array(zipBuffer), {
+  headers: {
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="${baseName}.zip"`,
+  },
+})
 }

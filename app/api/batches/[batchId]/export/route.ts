@@ -1,58 +1,115 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { formatSerialId, buildVerifyUrl, buildCapVerifyUrl } from "@/lib/serial"
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
+import { makeCsvName } from "@/lib/actions/batches"
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://verifychain-africa.vercel.app"
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ batchId: string }> }
 ) {
-  const { batchId } = await params
   const session = await auth()
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  const { batchId } = await params
 
   const manufacturer = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },
   })
   if (!manufacturer) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return Response.json({ error: "Not found" }, { status: 404 })
   }
 
   const batch = await prisma.batch.findFirst({
-  where: { id: batchId, manufacturerId: manufacturer.id },
-  include: {
-    product: true,
-    bottles: {
-      orderBy: { createdAt: "asc" },
-      include: { cap: true },
+    where: { id: batchId, manufacturerId: manufacturer.id },
+    include: {
+      product: true,
+      bottles: {
+        include: { cap: true },
+      },
     },
-  },
-})
+  })
 
   if (!batch) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return Response.json({ error: "Batch not found" }, { status: 404 })
   }
 
-  const rows = [
-  ["Bottle Serial", "Bottle QR URL", "Top Cap Code", "Hidden Cap Serial", "Hidden Cap QR URL", "Status"],
-  ...batch.bottles.map((b) => [
-    b.serialId,
-    buildVerifyUrl(b.serialId),
-    b.cap?.topCode ?? "",
-    b.cap?.hiddenSerialId ?? "",
-    b.cap ? buildCapVerifyUrl(b.cap.hiddenSerialId) : "",
-    b.status,
-  ]),
-]
+  const productName = batch.product?.name ?? "NoProduct"
+  const authMode = batch.product?.authMode ?? "PAIRED"
+  const filename = makeCsvName(
+    manufacturer.companyName,
+    productName,
+    batch.batchCode
+  )
 
-  const csv = rows.map((r) => r.join(",")).join("\n")
+  // Build CSV rows based on auth mode
+  const headers =
+    authMode === "SINGLE"
+      ? ["Unit #", "Serial ID", "Verification URL", "QR Filename", "Status"]
+      : [
+          "Unit #",
+          "Bottle Serial ID",
+          "Bottle QR URL",
+          "Bottle QR Filename",
+          "Top Cap Code",
+          "Hidden Serial ID",
+          "Cap QR URL",
+          "Cap QR Filename",
+          "Status",
+        ]
 
-  return new NextResponse(csv, {
+  const rows = batch.bottles.map((bottle, i) => {
+    const bottleUrl = `${APP_URL}/verify/${bottle.serialId}`
+
+    if (authMode === "SINGLE") {
+      return [
+        i + 1,
+        bottle.serialId,
+        bottleUrl,
+        `PRODUCT_${bottle.serialId}.png`,
+        bottle.status,
+      ]
+    }
+
+    const capUrl = bottle.cap
+      ? `${APP_URL}/verify/cap/${bottle.cap.hiddenSerialId}`
+      : ""
+
+    return [
+      i + 1,
+      bottle.serialId,
+      bottleUrl,
+      `BOTTLE_${bottle.serialId}.png`,
+      bottle.cap?.topCode ?? "",
+      bottle.cap?.hiddenSerialId ?? "",
+      capUrl,
+      bottle.cap ? `CAP_${bottle.cap.hiddenSerialId}.png` : "",
+      bottle.status,
+    ]
+  })
+
+  const csv = [
+    // File header block
+    `# VerifyChain Africa — Serial Export`,
+    `# Manufacturer: ${manufacturer.companyName}`,
+    `# Product: ${productName}`,
+    `# Batch: ${batch.batchCode}`,
+    `# Auth Mode: ${authMode}`,
+    `# Units: ${batch.bottles.length}`,
+    `# Region: ${batch.targetRegion ?? "Not specified"}`,
+    `# Generated: ${new Date().toISOString()}`,
+    `#`,
+    headers.join(","),
+    ...rows.map((r) => r.join(",")),
+  ].join("\n")
+
+  return new Response(csv, {
     headers: {
       "Content-Type": "text/csv",
-      "Content-Disposition": `attachment; filename="batch-${batchId}.csv"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
     },
   })
 }

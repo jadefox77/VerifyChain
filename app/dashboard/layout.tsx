@@ -11,6 +11,12 @@ export default async function DashboardLayout({
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
+
+  if (session.user.mustResetPassword) {
+  redirect("/auth/reset-password")
+}
+
+
   const manufacturer = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },
     select: { onboardingStatus: true },

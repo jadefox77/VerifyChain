@@ -121,6 +121,9 @@ model User {
 
   @@index([email])
   @@index([role])
+  password          String?   // hashed — null for OAuth users
+  mustResetPassword Boolean   @default(false)
+  tempPasswordUsed  Boolean   @default(false)
 }
 
 // =============================================================================
@@ -201,7 +204,7 @@ model Product {
   description String?
   active      Boolean @default(true)
   authMode AuthMode @default(PAIRED)
-  
+
   batches Batch[]
 
   createdAt DateTime @default(now())

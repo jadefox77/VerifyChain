@@ -23,12 +23,20 @@ export default function OnboardingSubmittedPage() {
             Status: <strong>Pending Review</strong> — typically 1–3 business days
           </p>
         </div>
-        <Link
-          href="/"
-          className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-        >
-          Return to home
-        </Link>
+       <div className="text-center space-y-2">
+  <p className="text-xs text-gray-500">
+    You will receive confirmation once your account is approved.
+  </p>
+  <p className="text-xs text-gray-500">
+    Questions? Contact{" "}
+    <a
+      href="mailto:support@verifychain.africa"
+      className="text-blue-400 hover:text-blue-300 transition-colors"
+    >
+      support@verifychain.africa
+    </a>
+  </p>
+</div> 
       </div>
     </main>
   )

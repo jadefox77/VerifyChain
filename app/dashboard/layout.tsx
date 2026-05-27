@@ -1,6 +1,7 @@
 import { auth, signOut } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
+import { prisma } from "@/lib/prisma"
 
 export default async function DashboardLayout({
   children,
@@ -8,7 +9,20 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const session = await auth()
-  if (!session) redirect("/login")
+  if (!session?.user?.id) redirect("/login")
+
+  const manufacturer = await prisma.manufacturer.findUnique({
+    where: { userId: session.user.id },
+    select: { onboardingStatus: true },
+  })
+
+  // No manufacturer record yet
+  if (!manufacturer) redirect("/onboarding")
+
+  // Manufacturer exists but not yet approved
+  if (manufacturer.onboardingStatus !== "ACTIVE_PRODUCTION") {
+    redirect("/onboarding/pending")
+  }
 
   async function handleSignOut() {
     "use server"

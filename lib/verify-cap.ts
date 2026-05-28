@@ -7,7 +7,7 @@ type CapVerifyInput = {
   lng?: number
 }
 
-type CapVerifyResult =
+export type CapVerifyResult =
   | { status: "GENUINE"; message: string; productName: string; openedAt: Date }
   | { status: "WARNING"; message: string; firstOpened: Date; firstLocation: string | null }
   | { status: "FLAGGED"; message: string; reason: string }

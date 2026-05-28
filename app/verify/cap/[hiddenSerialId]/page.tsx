@@ -1,26 +1,12 @@
 import { verifyCap } from "@/lib/verify-cap"
 import { verifySignature } from "@/lib/serial"
+import type { CapVerifyResult } from "@/lib/verify-cap"
 
-export default async function CapVerifyPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ hiddenSerialId: string }>
-  searchParams: Promise<{ sig?: string; bottle?: string }>
-}) {
-  const { hiddenSerialId } = await params
-  const { sig, bottle } = await searchParams
+type RenderInput =
+  | CapVerifyResult
+  | { status: "NOT_FOUND"; message: string }
 
-  const signatureValid = sig ? verifySignature(hiddenSerialId, sig) : false
-
-  const result = signatureValid
-    ? await verifyCap({ hiddenSerialId, bottleSerialId: bottle })
-    : {
-        status: "NOT_FOUND" as const,
-        message:
-          "Invalid or tampered QR code. This product may be counterfeit.",
-      }
-
+function renderResult(result: RenderInput) {
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
@@ -153,4 +139,40 @@ export default async function CapVerifyPage({
       </div>
     </main>
   )
+}
+
+export default async function CapVerifyPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ hiddenSerialId: string }>
+  searchParams: Promise<{ sig?: string; bottle?: string }>
+}) {
+  const { hiddenSerialId } = await params
+  const { sig, bottle } = await searchParams
+
+  const signatureValid = sig ? verifySignature(hiddenSerialId, sig) : false
+
+  if (!signatureValid) {
+    return renderResult({
+      status: "NOT_FOUND",
+      message:
+        "Invalid or tampered QR code. This product may be counterfeit.",
+    })
+  }
+
+  if (!bottle) {
+    return renderResult({
+      status: "NOT_FOUND",
+      message:
+        "Incomplete verification. Please scan the bottle QR code first, then scan the cap QR inside.",
+    })
+  }
+
+  const result = await verifyCap({
+    hiddenSerialId,
+    bottleSerialId: bottle,
+  })
+
+  return renderResult(result)
 }

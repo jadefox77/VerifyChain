@@ -80,6 +80,7 @@ export default async function VerifyPage({
           sub={`First verified: ${new Date(
             result.firstScan
           ).toLocaleDateString("en-NG", {
+            timeZone: "Africa/Lagos",
             day: "numeric",
             month: "short",
             year: "numeric",
@@ -107,6 +108,7 @@ export default async function VerifyPage({
           sub={`Verified: ${new Date(
             result.openedAt
           ).toLocaleDateString("en-NG", {
+            timeZone: "Africa/Lagos",
             day: "numeric",
             month: "short",
             year: "numeric",
@@ -164,7 +166,12 @@ export default async function VerifyPage({
                 </li>
               ))}
             </ol>
-
+            <div className="flex items-center gap-2 p-2.5 bg-yellow-500/5 border border-yellow-500/20 rounded-lg mt-2">
+  <span className="text-yellow-400 text-sm">⏱</span>
+  <p className="text-xs text-yellow-400">
+    You have <strong>10 minutes</strong> to complete this step before your session expires.
+  </p>
+</div>
             {result.topCode && (
               <div className="pt-3 border-t border-gray-800">
                 <p className="text-[10px] font-mono text-gray-600 mb-1">

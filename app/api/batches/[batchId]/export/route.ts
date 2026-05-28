@@ -2,8 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextRequest } from "next/server"
 import { makeCsvName } from "@/lib/batch-naming"
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://verifychain-africa.vercel.app"
+import { buildVerifyUrl, buildCapVerifyUrl } from "@/lib/serial"
 
 export async function GET(
   req: NextRequest,
@@ -45,7 +44,6 @@ export async function GET(
     batch.batchCode
   )
 
-  // Build CSV rows based on auth mode
   const headers =
     authMode === "SINGLE"
       ? ["Unit #", "Serial ID", "Verification URL", "QR Filename", "Status"]
@@ -62,7 +60,8 @@ export async function GET(
         ]
 
   const rows = batch.bottles.map((bottle, i) => {
-    const bottleUrl = `${APP_URL}/verify/${bottle.serialId}`
+    // Signed bottle URL
+    const bottleUrl = buildVerifyUrl(bottle.serialId)
 
     if (authMode === "SINGLE") {
       return [
@@ -74,8 +73,9 @@ export async function GET(
       ]
     }
 
+    // Signed cap URL with bottle pairing
     const capUrl = bottle.cap
-      ? `${APP_URL}/verify/cap/${bottle.cap.hiddenSerialId}`
+      ? buildCapVerifyUrl(bottle.cap.hiddenSerialId, bottle.serialId)
       : ""
 
     return [
@@ -92,7 +92,6 @@ export async function GET(
   })
 
   const csv = [
-    // File header block
     `# VerifyChain Africa — Serial Export`,
     `# Manufacturer: ${manufacturer.companyName}`,
     `# Product: ${productName}`,

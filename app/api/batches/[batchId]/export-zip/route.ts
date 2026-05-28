@@ -4,8 +4,7 @@ import { NextRequest } from "next/server"
 import QRCode from "qrcode"
 import JSZip from "jszip"
 import { makeBatchZipName } from "@/lib/batch-naming"
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://verifychain-africa.vercel.app"
+import { buildVerifyUrl, buildCapVerifyUrl } from "@/lib/serial"
 
 export async function GET(
   req: NextRequest,
@@ -50,11 +49,11 @@ export async function GET(
   const zip = new JSZip()
 
   if (authMode === "SINGLE") {
-    // Single mode — one folder, one QR per unit
     const folder = zip.folder("product-qr")!
 
     for (const bottle of batch.bottles) {
-      const url = `${APP_URL}/verify/${bottle.serialId}`
+      // Use signed URL
+      const url = buildVerifyUrl(bottle.serialId)
       const qr = await QRCode.toBuffer(url, {
         errorCorrectionLevel: "H",
         width: 400,
@@ -63,13 +62,12 @@ export async function GET(
       folder.file(`PRODUCT_${bottle.serialId}.png`, qr)
     }
   } else {
-    // Paired mode — two folders
     const bottleFolder = zip.folder("bottle-qr")!
     const capFolder = zip.folder("cap-qr")!
 
     for (const bottle of batch.bottles) {
-      // Bottle QR
-      const bottleUrl = `${APP_URL}/verify/${bottle.serialId}`
+      // Signed bottle URL
+      const bottleUrl = buildVerifyUrl(bottle.serialId)
       const bottleQr = await QRCode.toBuffer(bottleUrl, {
         errorCorrectionLevel: "H",
         width: 400,
@@ -77,9 +75,12 @@ export async function GET(
       })
       bottleFolder.file(`BOTTLE_${bottle.serialId}.png`, bottleQr)
 
-      // Cap QR (hidden internal)
+      // Signed cap URL — includes bottle serial for pairing validation
       if (bottle.cap) {
-        const capUrl = `${APP_URL}/verify/cap/${bottle.cap.hiddenSerialId}`
+        const capUrl = buildCapVerifyUrl(
+          bottle.cap.hiddenSerialId,
+          bottle.serialId
+        )
         const capQr = await QRCode.toBuffer(capUrl, {
           errorCorrectionLevel: "H",
           width: 400,
@@ -90,7 +91,7 @@ export async function GET(
     }
   }
 
-  // Add README inside ZIP
+  // README
   const readmeLines = [
     `VerifyChain Africa — Batch Export`,
     `═══════════════════════════════════`,
@@ -125,9 +126,9 @@ export async function GET(
   const zipBuffer = await zip.generateAsync({ type: "nodebuffer" })
 
   return new Response(new Uint8Array(zipBuffer), {
-  headers: {
-    "Content-Type": "application/zip",
-    "Content-Disposition": `attachment; filename="${baseName}.zip"`,
-  },
-})
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${baseName}.zip"`,
+    },
+  })
 }

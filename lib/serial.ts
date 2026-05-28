@@ -42,16 +42,31 @@ function signSerial(serialId: string): string {
     .slice(0, 16)
 }
 
+// ── Use NEXT_PUBLIC_APP_URL for QR codes ──────────────────────────────────────
+// NEXTAUTH_URL is for auth callbacks only — not for public-facing QR URLs
+// NEXT_PUBLIC_APP_URL must be set to your production domain in Vercel
+
+function getBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.NEXTAUTH_URL ??
+    "http://localhost:3000"
+  )
+}
+
 export function buildVerifyUrl(serialId: string): string {
-  const base = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+  const base = getBaseUrl()
   const sig = signSerial(serialId)
   return `${base}/verify/${serialId}?sig=${sig}`
 }
 
-export function buildCapVerifyUrl(hiddenSerialId: string): string {
-  const base = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+export function buildCapVerifyUrl(
+  hiddenSerialId: string,
+  bottleSerialId: string
+): string {
+  const base = getBaseUrl()
   const sig = signSerial(hiddenSerialId)
-  return `${base}/verify/cap/${hiddenSerialId}?sig=${sig}`
+  return `${base}/verify/cap/${hiddenSerialId}?sig=${sig}&bottle=${bottleSerialId}`
 }
 
 export function verifySignature(serialId: string, sig: string): boolean {

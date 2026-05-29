@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { OnboardingForm } from "@/components/onboarding/onboarding-form"
 import { Shield } from "lucide-react"
+import { handleSignOut } from "@/lib/actions/auth"
 
 export default async function OnboardingPage() {
   const session = await auth()
@@ -29,6 +30,21 @@ export default async function OnboardingPage() {
             Complete all steps to apply for VerifyChain Africa access.
             Your application will be reviewed before activation.
           </p>
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <p className="text-xs text-gray-600">
+              Signed in as{" "}
+              <span className="text-gray-500">{session.user.email}</span>
+            </p>
+            <span className="text-gray-700">·</span>
+            <form action={handleSignOut}>
+              <button
+                type="submit"
+                className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
 
         <OnboardingForm

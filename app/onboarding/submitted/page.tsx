@@ -1,5 +1,5 @@
 import { CheckCircle2, Clock } from "lucide-react"
-import Link from "next/link"
+import { handleSignOut } from "@/lib/actions/auth"
 
 export default function OnboardingSubmittedPage() {
   return (
@@ -10,44 +10,50 @@ export default function OnboardingSubmittedPage() {
             <CheckCircle2 className="w-12 h-12 text-green-400" />
           </div>
         </div>
+
         <h1 className="text-2xl font-bold text-white mb-3">
           Application Submitted
         </h1>
+
         <p className="text-gray-400 text-sm mb-6">
           Your application is now under review by the VerifyChain team.
-          You will be notified once your account is approved and activated.
+          You will be notified once your account is approved and
+          activated.
         </p>
-        <div className="flex items-center justify-center gap-2 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg mb-8">
+
+        <div className="flex items-center justify-center gap-2 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg mb-6">
           <Clock className="w-4 h-4 text-yellow-400 shrink-0" />
           <p className="text-xs text-yellow-400">
-            Status: <strong>Pending Review</strong> — typically 1–3 business days
+            Status: <strong>Pending Review</strong> — typically 1–3
+            business days
           </p>
         </div>
-       <div className="text-center space-y-2">
-  <p className="text-xs text-gray-500">
-    You will receive confirmation once your account is approved.
-  </p>
-  <p className="text-xs text-gray-500">
-    Questions? Contact{" "}
-    <a
-      href="mailto:support@verifychain.africa"
-      className="text-blue-400 hover:text-blue-300 transition-colors"
-    >
-      support@verifychain.africa
-    </a>
-  </p>
-  <div className="pt-4 border-t border-gray-800/40 text-center">
-  <form method="POST" action="/api/auth/signout">
-    <input type="hidden" name="callbackUrl" value="/login" />
-    <button
-      type="submit"
-      className="text-xs text-gray-600 hover:text-gray-500 transition-colors"
-    >
-      Sign out
-    </button>
-  </form>
-</div>
-</div> 
+
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500">
+            You will receive confirmation once your account is approved.
+          </p>
+          <p className="text-xs text-gray-500">
+            Questions?{" "}
+            <a
+              href="mailto:support@verifychain.africa"
+              className="text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              support@verifychain.africa
+            </a>
+          </p>
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-gray-800/40">
+          <form action={handleSignOut}>
+            <button
+              type="submit"
+              className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
     </main>
   )

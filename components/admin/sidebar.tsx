@@ -16,27 +16,23 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
-  AlertTriangle,
   Activity,
   CreditCard,
+  LogOut,
 } from "lucide-react"
 import type { UserRole } from "@prisma/client"
 import { cn } from "@/lib/utils"
-import { LogOut } from "lucide-react"
-
-
+import { handleSignOut } from "@/lib/actions/auth"
 
 interface NavItem {
   label: string
   href: string
   icon: React.ElementType
-  badge?: number
   roles: UserRole[]
   group: "operations" | "intelligence" | "platform"
 }
 
 const NAV_ITEMS: NavItem[] = [
-  // Operations
   {
     label: "Command Center",
     href: "/admin",
@@ -58,7 +54,6 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN", "SUPPORT"],
     group: "operations",
   },
-  // Intelligence
   {
     label: "Fraud Intelligence",
     href: "/admin/fraud",
@@ -80,7 +75,6 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN", "FRAUD_ANALYST", "SUPPORT", "REGULATORY_OBSERVER"],
     group: "intelligence",
   },
-  // Platform
   {
     label: "Serialization",
     href: "/admin/serialization",
@@ -103,12 +97,12 @@ const NAV_ITEMS: NavItem[] = [
     group: "platform",
   },
   {
-  label: "Billing",
-  href: "/admin/billing",
-  icon: CreditCard,
-  roles: ["SUPER_ADMIN"],
-  group: "platform",
-},
+    label: "Billing",
+    href: "/admin/billing",
+    icon: CreditCard,
+    roles: ["SUPER_ADMIN"],
+    group: "platform",
+  },
 ]
 
 const GROUP_LABELS = {
@@ -120,10 +114,12 @@ const GROUP_LABELS = {
 interface AdminSidebarProps {
   userRole: UserRole
   alertCount?: number
-  signOutAction: () => Promise<void>
 }
 
- export function AdminSidebar({ userRole, alertCount = 0, signOutAction }: AdminSidebarProps) {
+export function AdminSidebar({
+  userRole,
+  alertCount = 0,
+}: AdminSidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
 
@@ -131,13 +127,15 @@ interface AdminSidebarProps {
     item.roles.includes(userRole)
   )
 
-  const groups = (["operations", "intelligence", "platform"] as const).map(
-    (group) => ({
+  const groups = (
+    ["operations", "intelligence", "platform"] as const
+  )
+    .map((group) => ({
       key: group,
       label: GROUP_LABELS[group],
       items: visibleItems.filter((i) => i.group === group),
-    })
-  ).filter((g) => g.items.length > 0)
+    }))
+    .filter((g) => g.items.length > 0)
 
   return (
     <aside
@@ -229,7 +227,9 @@ interface AdminSidebarProps {
                       </div>
                       {!collapsed && (
                         <>
-                          <span className="flex-1 truncate">{item.label}</span>
+                          <span className="flex-1 truncate">
+                            {item.label}
+                          </span>
                           {showBadge && (
                             <span className="text-[10px] font-mono bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">
                               {alertCount > 99 ? "99+" : alertCount}
@@ -249,42 +249,40 @@ interface AdminSidebarProps {
         ))}
       </nav>
 
-     {/* Footer — role badge + sign out */}
-{!collapsed && (
-  <div className="px-4 py-3 border-t border-gray-800/60 space-y-2">
-    <div className="flex items-center gap-2">
-      <Activity className="w-3 h-3 text-gray-600" />
-      <span className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
-        {userRole.replace(/_/g, " ")}
-      </span>
-    </div>
-    <form method="POST" action="/api/auth/signout">
-      <input type="hidden" name="callbackUrl" value="/login" />
-      <button
-        type="submit"
-        className="flex items-center gap-1.5 text-[10px] font-mono text-gray-600 hover:text-gray-400 transition-colors"
-      >
-        <LogOut className="w-3 h-3" />
-        Sign out
-      </button>
-    </form>
-  </div>
-)}
+      {/* Footer */}
+      {!collapsed && (
+        <div className="px-4 py-3 border-t border-gray-800/60 space-y-2">
+          <div className="flex items-center gap-2">
+            <Activity className="w-3 h-3 text-gray-600" />
+            <span className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
+              {userRole.replace(/_/g, " ")}
+            </span>
+          </div>
+          <form action={handleSignOut}>
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 text-[10px] font-mono text-gray-600 hover:text-gray-400 transition-colors"
+            >
+              <LogOut className="w-3 h-3" />
+              Sign out
+            </button>
+          </form>
+        </div>
+      )}
 
-{collapsed && (
-  <div className="px-2 py-3 border-t border-gray-800/60 flex justify-center">
-    <form method="POST" action="/api/auth/signout">
-      <input type="hidden" name="callbackUrl" value="/login" />
-      <button
-        type="submit"
-        className="text-gray-600 hover:text-gray-400 transition-colors"
-        title="Sign out"
-      >
-        <LogOut className="w-3.5 h-3.5" />
-      </button>
-    </form>
-  </div>
-)}
+      {collapsed && (
+        <div className="px-2 py-3 border-t border-gray-800/60 flex justify-center">
+          <form action={handleSignOut}>
+            <button
+              type="submit"
+              className="text-gray-600 hover:text-gray-400 transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </form>
+        </div>
+      )}
     </aside>
   )
 }

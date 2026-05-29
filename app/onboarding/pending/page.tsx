@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { Clock, CheckCircle2, Circle } from "lucide-react"
+import { handleSignOut } from "@/lib/actions/auth"
 
 const STAGE_LABELS: Record<string, string> = {
   PENDING_REVIEW: "Pending Review",
@@ -75,7 +76,7 @@ export default async function OnboardingPendingPage() {
           </p>
         </div>
 
-        {/* Rejected or suspended state */}
+        {/* Rejected or suspended */}
         {(isRejected || isSuspended) && (
           <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
             <p className="text-sm font-semibold text-red-400">
@@ -102,12 +103,10 @@ export default async function OnboardingPendingPage() {
             <h2 className="text-xs font-mono text-gray-500 uppercase tracking-wider">
               Onboarding Progress
             </h2>
-
             <div className="space-y-3">
               {STAGE_ORDER.map((stage, i) => {
                 const isDone = i < currentStageIndex
                 const isCurrent = i === currentStageIndex
-                const isPending = i > currentStageIndex
 
                 return (
                   <div key={stage} className="flex items-start gap-3">
@@ -147,43 +146,44 @@ export default async function OnboardingPendingPage() {
           </div>
         )}
 
-        {/* Info */}
-        {!isRejected && !isSuspended && (
-          <div className="text-center space-y-2">
-            <p className="text-xs text-gray-600">
-              Submitted{" "}
-              {new Date(manufacturer.createdAt).toLocaleDateString(
-                "en-NG",
-                {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                }
-              )}
-            </p>
-            <p className="text-xs text-gray-600">
-              Questions?{" "}
-              <a
-                href="mailto:support@verifychain.africa"
-                className="text-blue-400 hover:text-blue-300 transition-colors"
+        {/* Info + sign out */}
+        <div className="text-center space-y-2">
+          {!isRejected && !isSuspended && (
+            <>
+              <p className="text-xs text-gray-600">
+                Submitted{" "}
+                {new Date(manufacturer.createdAt).toLocaleDateString(
+                  "en-NG",
+                  {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  }
+                )}
+              </p>
+              <p className="text-xs text-gray-600">
+                Questions?{" "}
+                <a
+                  href="mailto:support@verifychain.africa"
+                  className="text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  support@verifychain.africa
+                </a>
+              </p>
+            </>
+          )}
+
+          <div className="pt-4 border-t border-gray-800/60">
+            <form action={handleSignOut}>
+              <button
+                type="submit"
+                className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
               >
-                support@verifychain.africa
-              </a>
-            </p>
-           <div className="pt-4 border-t border-gray-800/60 text-center">
-  <form method="POST" action="/api/auth/signout">
-    <input type="hidden" name="callbackUrl" value="/login" />
-    <button
-      type="submit"
-      className="text-xs text-gray-600 hover:text-gray-500 transition-colors"
-    >
-      Sign out and use a different account
-    </button>
-  </form>
-</div>
+                Sign out and use a different account
+              </button>
+            </form>
           </div>
-          
-        )}
+        </div>
       </div>
     </main>
   )

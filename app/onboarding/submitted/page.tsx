@@ -36,6 +36,17 @@ export default function OnboardingSubmittedPage() {
       support@verifychain.africa
     </a>
   </p>
+  <div className="pt-4 border-t border-gray-800/40 text-center">
+  <form method="POST" action="/api/auth/signout">
+    <input type="hidden" name="callbackUrl" value="/login" />
+    <button
+      type="submit"
+      className="text-xs text-gray-600 hover:text-gray-500 transition-colors"
+    >
+      Sign out
+    </button>
+  </form>
+</div>
 </div> 
       </div>
     </main>

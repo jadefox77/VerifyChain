@@ -22,6 +22,9 @@ import {
 } from "lucide-react"
 import type { UserRole } from "@prisma/client"
 import { cn } from "@/lib/utils"
+import { LogOut } from "lucide-react"
+
+
 
 interface NavItem {
   label: string
@@ -117,9 +120,10 @@ const GROUP_LABELS = {
 interface AdminSidebarProps {
   userRole: UserRole
   alertCount?: number
+  signOutAction: () => Promise<void>
 }
 
-export function AdminSidebar({ userRole, alertCount = 0 }: AdminSidebarProps) {
+ export function AdminSidebar({ userRole, alertCount = 0, signOutAction }: AdminSidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
 
@@ -245,17 +249,42 @@ export function AdminSidebar({ userRole, alertCount = 0 }: AdminSidebarProps) {
         ))}
       </nav>
 
-      {/* Footer — user role badge */}
-      {!collapsed && (
-        <div className="px-4 py-3 border-t border-gray-800/60">
-          <div className="flex items-center gap-2">
-            <Activity className="w-3 h-3 text-gray-600" />
-            <span className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
-              {userRole.replace("_", " ")}
-            </span>
-          </div>
-        </div>
-      )}
+     {/* Footer — role badge + sign out */}
+{!collapsed && (
+  <div className="px-4 py-3 border-t border-gray-800/60 space-y-2">
+    <div className="flex items-center gap-2">
+      <Activity className="w-3 h-3 text-gray-600" />
+      <span className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
+        {userRole.replace(/_/g, " ")}
+      </span>
+    </div>
+    <form method="POST" action="/api/auth/signout">
+      <input type="hidden" name="callbackUrl" value="/login" />
+      <button
+        type="submit"
+        className="flex items-center gap-1.5 text-[10px] font-mono text-gray-600 hover:text-gray-400 transition-colors"
+      >
+        <LogOut className="w-3 h-3" />
+        Sign out
+      </button>
+    </form>
+  </div>
+)}
+
+{collapsed && (
+  <div className="px-2 py-3 border-t border-gray-800/60 flex justify-center">
+    <form method="POST" action="/api/auth/signout">
+      <input type="hidden" name="callbackUrl" value="/login" />
+      <button
+        type="submit"
+        className="text-gray-600 hover:text-gray-400 transition-colors"
+        title="Sign out"
+      >
+        <LogOut className="w-3.5 h-3.5" />
+      </button>
+    </form>
+  </div>
+)}
     </aside>
   )
 }

@@ -1,0 +1,42 @@
+import { runFraudPipeline, runFastFraudPipeline } from "@/lib/fraud-pipeline"
+import { getAdminSession } from "@/lib/admin-auth"
+import { NextRequest } from "next/server"
+
+export const maxDuration = 10
+
+export async function POST(req: NextRequest) {
+  const session = await getAdminSession()
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    // Run only fraud rate recomputation on hobby plan
+    // Full pipeline runs via cron daily
+    const result = await runFastFraudPipeline()
+    return Response.json({ success: true, result })
+  } catch (err) {
+    console.error("[fraud-pipeline] Error:", err)
+    return Response.json(
+      { error: "Pipeline failed", detail: String(err) },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(req: NextRequest) {
+  const cronSecret = req.headers.get("x-cron-secret")
+  if (cronSecret !== process.env.CRON_SECRET) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    const result = await runFraudPipeline()
+    return Response.json({ success: true, result })
+  } catch (err) {
+    return Response.json(
+      { error: "Pipeline failed", detail: String(err) },
+      { status: 500 }
+    )
+  }
+}

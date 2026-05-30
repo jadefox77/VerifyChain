@@ -491,3 +491,57 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
     checks,
   }
 }
+
+// ── Fast pipeline — fraud rates only ─────────────────────────────────────────
+// Runs in under 10 seconds — suitable for Hobby plan manual trigger
+// Full pipeline runs via daily cron
+
+export async function runFastFraudPipeline(): Promise<PipelineResult> {
+  const startTime = Date.now()
+  let alertsCreated = 0
+  const checks = {
+    velocity: 0,
+    teleportation: 0,
+    drift: 0,
+    bot: 0,
+    fraud_rates: 0,
+  }
+
+  const manufacturers = await prisma.manufacturer.findMany({
+    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+    select: { id: true },
+  })
+
+  for (const mfr of manufacturers) {
+    const [totalScans, fraudScans, totalBottles] = await Promise.all([
+      prisma.scanLog.count({ where: { manufacturerId: mfr.id } }),
+      prisma.scanLog.count({
+        where: { manufacturerId: mfr.id, fraudFlag: true },
+      }),
+      prisma.bottle.count({ where: { manufacturerId: mfr.id } }),
+    ])
+
+    const fraudRate =
+      totalScans > 0 ? (fraudScans / totalScans) * 100 : 0
+
+    await prisma.manufacturer.update({
+      where: { id: mfr.id },
+      data: {
+        totalScans,
+        totalFraudFlags: fraudScans,
+        totalBottlesGenerated: totalBottles,
+        fraudRateCached: fraudRate,
+      },
+    })
+
+    checks.fraud_rates++
+  }
+
+  return {
+    ran_at: new Date().toISOString(),
+    duration_ms: Date.now() - startTime,
+    alerts_created: alertsCreated,
+    manufacturers_updated: manufacturers.length,
+    checks,
+  }
+}

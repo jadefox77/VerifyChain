@@ -116,14 +116,15 @@ model User {
   manufacturer Manufacturer?
   auditLogs    AuditLog[]
 
+  password          String?
+  mustResetPassword Boolean   @default(false)
+  tempPasswordUsed  Boolean   @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([email])
   @@index([role])
-  password          String?   // hashed — null for OAuth users
-  mustResetPassword Boolean   @default(false)
-  tempPasswordUsed  Boolean   @default(false)
 }
 
 // =============================================================================
@@ -237,6 +238,8 @@ model Batch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  generationMode String @default("PRE_PAIRED")
+
   @@index([manufacturerId])
   @@index([targetRegion])
 }
@@ -274,24 +277,25 @@ model Bottle {
 // =============================================================================
 
 model Cap {
-  id       String @id @default(cuid())
-  bottleId String @unique
-  bottle   Bottle @relation(fields: [bottleId], references: [id], onDelete: Cascade)
-
-  topCode        String    @unique // Visible alphanumeric on top of cap e.g. "X7P2A9"
-  hiddenSerialId String    @unique // Internal QR identity — only visible after opening
-  hiddenHmacSig  String    // HMAC signature for hidden QR
+  id             String   @id @default(cuid())
+  bottleId       String?  @unique  // null when unpaired
+  bottle         Bottle?  @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+  batchId        String?  // set for unpaired caps to track origin batch
+  topCode        String   @unique
+  hiddenSerialId String   @unique
+  hiddenHmacSig  String
   status         CapStatus @default(SEALED)
   openedAt       DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   scanLogs ScanLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@index([topCode])
   @@index([hiddenSerialId])
   @@index([status])
+  @@index([bottleId])
+  @@index([batchId])
 }
 
 // =============================================================================

@@ -55,6 +55,14 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
     }
   }
 
+  if (!cap.bottle) {
+  return {
+    status: "FLAGGED",
+    message: "This cap has not been paired to a bottle yet.",
+    reason: "UNPAIRED_CAP",
+  }
+}
+
   // Pairing check
   if (bottleSerialId && cap.bottle.serialId !== bottleSerialId) {
     await prisma.scanLog.create({
@@ -77,7 +85,7 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
     })
 
     await prisma.bottle.update({
-      where: { id: cap.bottleId },
+      where: { id: cap.bottleId! },
       data: { status: "FLAGGED" },
     })
 
@@ -124,7 +132,7 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
   await prisma.scanLog.create({
     data: {
       capId: cap.id,
-      bottleId: cap.bottleId,
+      bottleId: cap.bottleId!,
       manufacturerId: cap.bottle.manufacturerId,
       batchId: cap.bottle.batchId,
       lat: lat ?? null,
@@ -154,7 +162,7 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
   // Update bottle status
   if (cap.bottle.status === "MINT") {
     await prisma.bottle.update({
-      where: { id: cap.bottleId },
+      where: { id: cap.bottleId! },
       data: { status: fraudFlag ? "FLAGGED" : "OPENED" },
     })
   }

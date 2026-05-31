@@ -176,6 +176,15 @@ export async function verifyBottle(
     }
   }
 
+  // Unpaired bottle — cap not yet assigned on production line
+if (!bottle.cap && bottle.batch.generationMode === "UNPAIRED") {
+  return {
+    status: "FLAGGED",
+    message:
+      "This bottle has not yet been paired with a cap on the production line. If you purchased this product sealed please contact the manufacturer.",
+  }
+}
+
   // Normal paired flow — prompt cap scan
   return {
     status: "PROMPT_CAP",

@@ -29,7 +29,7 @@ export async function GET(
     include: {
       product: true,
       bottles: {
-        include: { cap: true },
+        include: { cap: true }, // ← explicit cap include
       },
     },
   })
@@ -40,6 +40,7 @@ export async function GET(
 
   const productName = batch.product?.name ?? "NoProduct"
   const authMode = batch.product?.authMode ?? "PAIRED"
+  const generationMode = (batch as any).generationMode ?? "PRE_PAIRED"
   const baseName = makeBatchZipName(
     manufacturer.companyName,
     productName,
@@ -50,9 +51,7 @@ export async function GET(
 
   if (authMode === "SINGLE") {
     const folder = zip.folder("product-qr")!
-
     for (const bottle of batch.bottles) {
-      // Use signed URL
       const url = buildVerifyUrl(bottle.serialId)
       const qr = await QRCode.toBuffer(url, {
         errorCorrectionLevel: "H",
@@ -61,12 +60,47 @@ export async function GET(
       })
       folder.file(`PRODUCT_${bottle.serialId}.png`, qr)
     }
+  } else if (generationMode === "UNPAIRED") {
+    const bottleFolder = zip.folder("bottle-qr")!
+    const capFolder = zip.folder("cap-qr")!
+
+    for (const bottle of batch.bottles) {
+      const url = buildVerifyUrl(bottle.serialId)
+      const qr = await QRCode.toBuffer(url, {
+        errorCorrectionLevel: "H",
+        width: 400,
+        margin: 2,
+      })
+      bottleFolder.file(`BOTTLE_${bottle.serialId}.png`, qr)
+    }
+
+    const unpairedCaps = await prisma.cap.findMany({
+      where: {
+  batchId: batch.id,
+  bottleId: { equals: null },
+},
+      select: {
+        topCode: true,
+        hiddenSerialId: true,
+        hiddenHmacSig: true,
+      },
+    })
+
+    for (const cap of unpairedCaps) {
+      const sig = cap.hiddenHmacSig.slice(0, 16)
+      const url = `${process.env.NEXT_PUBLIC_APP_URL}/verify/cap/${cap.hiddenSerialId}?sig=${sig}`
+      const qr = await QRCode.toBuffer(url, {
+        errorCorrectionLevel: "H",
+        width: 400,
+        margin: 2,
+      })
+      capFolder.file(`CAP_${cap.hiddenSerialId}.png`, qr)
+    }
   } else {
     const bottleFolder = zip.folder("bottle-qr")!
     const capFolder = zip.folder("cap-qr")!
 
     for (const bottle of batch.bottles) {
-      // Signed bottle URL
       const bottleUrl = buildVerifyUrl(bottle.serialId)
       const bottleQr = await QRCode.toBuffer(bottleUrl, {
         errorCorrectionLevel: "H",
@@ -75,10 +109,10 @@ export async function GET(
       })
       bottleFolder.file(`BOTTLE_${bottle.serialId}.png`, bottleQr)
 
-      // Signed cap URL — includes bottle serial for pairing validation
-      if (bottle.cap) {
+      const cap = (bottle as any).cap
+      if (cap) {
         const capUrl = buildCapVerifyUrl(
-          bottle.cap.hiddenSerialId,
+          cap.hiddenSerialId,
           bottle.serialId
         )
         const capQr = await QRCode.toBuffer(capUrl, {
@@ -86,12 +120,11 @@ export async function GET(
           width: 400,
           margin: 2,
         })
-        capFolder.file(`CAP_${bottle.cap.hiddenSerialId}.png`, capQr)
+        capFolder.file(`CAP_${cap.hiddenSerialId}.png`, capQr)
       }
     }
   }
 
-  // README
   const readmeLines = [
     `VerifyChain Africa — Batch Export`,
     `═══════════════════════════════════`,
@@ -99,6 +132,7 @@ export async function GET(
     `Product      : ${productName}`,
     `Batch Code   : ${batch.batchCode}`,
     `Auth Mode    : ${authMode}`,
+    `Generation   : ${generationMode}`,
     `Units        : ${batch.bottles.length}`,
     `Region       : ${batch.targetRegion ?? "Not specified"}`,
     `Generated    : ${new Date().toISOString()}`,
@@ -108,15 +142,29 @@ export async function GET(
           `SINGLE MODE INSTRUCTIONS`,
           `────────────────────────`,
           `Each QR in /product-qr/ goes on one unit of packaging.`,
-          `Consumer scans once and gets immediate verification result.`,
-          `No cap scanning required.`,
+          `Consumer scans once — no cap required.`,
+        ].join("\n")
+      : generationMode === "UNPAIRED"
+      ? [
+          `UNPAIRED MODE INSTRUCTIONS`,
+          `──────────────────────────`,
+          `/bottle-qr/  → Print on bottle labels`,
+          `/cap-qr/     → Print inside caps`,
+          ``,
+          `IMPORTANT: Bottle and cap QRs are NOT pre-matched.`,
+          `Pairing must be recorded on the production line via:`,
+          `  - Factory scanner API: POST /api/factory/pairing`,
+          `  - Manual submit: /admin/serialization/pairing/submit`,
+          ``,
+          `Until a bottle is paired with a cap, consumers cannot`,
+          `complete the second verification step.`,
         ].join("\n")
       : [
-          `PAIRED MODE INSTRUCTIONS`,
-          `────────────────────────`,
+          `PRE-PAIRED MODE INSTRUCTIONS`,
+          `────────────────────────────`,
           `/bottle-qr/  → Print on bottle label (consumer-visible)`,
           `/cap-qr/     → Print inside bottle cap (hidden until opened)`,
-          `Each BOTTLE_xxx.png is paired with its CAP_xxx.png.`,
+          `Each BOTTLE_xxx.png is pre-matched to its CAP_xxx.png.`,
           `Do not mix QR codes across units.`,
         ].join("\n"),
   ]

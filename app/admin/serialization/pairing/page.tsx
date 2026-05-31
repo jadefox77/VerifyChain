@@ -392,22 +392,22 @@ export default async function PairingMonitorPage() {
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs font-mono text-gray-500">
-                        {cap.bottle.serialId.slice(0, 12)}...
+                        {cap.bottle?.serialId?.slice(0, 12) ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs font-mono text-gray-500">
-                        {cap.bottle.batch?.batchCode ?? "—"}
+                        {cap.bottle?.batch?.batchCode ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs text-gray-400">
-                        {cap.bottle.batch?.product?.name ?? "—"}
+                        {cap.bottle?.batch?.product?.name ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs text-gray-500">
-                        {cap.bottle.batch?.manufacturer?.companyName ??
+                        {cap.bottle?.batch?.manufacturer?.companyName ??
                           "—"}
                       </span>
                     </td>

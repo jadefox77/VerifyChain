@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { ArrowLeft, Upload } from "lucide-react"
 import Link from "next/link"
+import crypto from "crypto"
 
 export default async function ManualSubmitPage() {
   await requireAdmin()
@@ -142,9 +143,8 @@ async function submitSinglePairing(formData: FormData) {
   const topCapCode = formData.get("topCapCode") as string
   const hiddenSerialId = formData.get("hiddenSerialId") as string
 
-  if (!manufacturerId || !bottleSerialId || !topCapCode || !hiddenSerialId) {
+  if (!manufacturerId || !bottleSerialId || !topCapCode || !hiddenSerialId)
     return
-  }
 
   const bottle = await prisma.bottle.findUnique({
     where: { serialId: bottleSerialId },
@@ -153,27 +153,36 @@ async function submitSinglePairing(formData: FormData) {
 
   if (!bottle || bottle.cap) return
 
-  // Check for duplicate cap identities
-  const [existingTop, existingHidden] = await Promise.all([
-    prisma.cap.findUnique({ where: { topCode: topCapCode } }),
-    prisma.cap.findUnique({ where: { hiddenSerialId } }),
-  ])
-
-  if (existingTop || existingHidden) return
-
-  const hiddenHmacSig = require("crypto")
-    .createHmac("sha256", process.env.QR_SECRET!)
-    .update(hiddenSerialId)
-    .digest("hex")
-
-  await prisma.cap.create({
-    data: {
-      bottleId: bottle.id,
-      topCode: topCapCode,
-      hiddenSerialId,
-      hiddenHmacSig,
-    },
+  // Check if this is an unpaired cap from a batch
+  const existingUnpairedCap = await prisma.cap.findUnique({
+    where: { hiddenSerialId },
   })
+
+  if (existingUnpairedCap && existingUnpairedCap.bottleId === null) {
+    // Link the existing unpaired cap to this bottle
+    await prisma.cap.update({
+      where: { id: existingUnpairedCap.id },
+      data: { bottleId: bottle.id },
+    })
+  } else if (!existingUnpairedCap) {
+    // Create a brand new cap pairing (scanner-generated)
+    const hiddenHmacSig = crypto
+      .createHmac("sha256", process.env.QR_SECRET!)
+      .update(hiddenSerialId)
+      .digest("hex")
+
+    await prisma.cap.create({
+      data: {
+        bottleId: bottle.id,
+        topCode: topCapCode,
+        hiddenSerialId,
+        hiddenHmacSig,
+      },
+    })
+  } else {
+    // Cap already paired to another bottle — reject
+    return
+  }
 
   redirect("/admin/serialization/pairing")
 }

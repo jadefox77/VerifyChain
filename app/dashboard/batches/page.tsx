@@ -108,7 +108,44 @@ export default async function BatchesPage() {
                   className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
                 />
               </div>
-
+{/* Only show generation mode for paired products */}
+<div className="flex flex-col gap-1.5">
+  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+    Generation Mode
+  </label>
+  <select
+    name="generationMode"
+    defaultValue="PRE_PAIRED"
+    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
+  >
+    <option value="PRE_PAIRED">
+      Pre-Paired — Bottle and cap linked at generation
+    </option>
+    <option value="UNPAIRED">
+      Unpaired — Bottle and cap printed separately, paired on line
+    </option>
+  </select>
+  <div className="grid grid-cols-2 gap-2 mt-1">
+    <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
+      <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Pre-Paired
+      </p>
+      <p className="text-[10px] text-gray-500 leading-relaxed">
+        Each bottle QR is matched to a specific cap QR at generation.
+        Best for integrated printing setups.
+      </p>
+    </div>
+    <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
+      <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Unpaired
+      </p>
+      <p className="text-[10px] text-gray-500 leading-relaxed">
+        Bottle and cap QRs generated independently. Pairing recorded
+        on the production line via scanner or manual submit.
+      </p>
+    </div>
+  </div>
+</div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Target Region
@@ -185,6 +222,11 @@ export default async function BatchesPage() {
                       >
                         {isPaired ? "Paired" : "Single"}
                       </span>
+                      {(batch as any).generationMode === "UNPAIRED" && (
+  <span className="shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded border bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-500/20">
+    Unpaired
+  </span>
+)}
                     </div>
                     <p className="text-xs text-gray-500">
                       {batch.product?.name ?? "No product"} ·{" "}

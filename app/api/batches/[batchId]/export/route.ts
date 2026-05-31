@@ -27,7 +27,7 @@ export async function GET(
     include: {
       product: true,
       bottles: {
-        include: { cap: true },
+        include: { cap: true }, // ← explicit cap include
       },
     },
   })
@@ -38,6 +38,7 @@ export async function GET(
 
   const productName = batch.product?.name ?? "NoProduct"
   const authMode = batch.product?.authMode ?? "PAIRED"
+  const generationMode = (batch as any).generationMode ?? "PRE_PAIRED"
   const filename = makeCsvName(
     manufacturer.companyName,
     productName,
@@ -46,7 +47,22 @@ export async function GET(
 
   const headers =
     authMode === "SINGLE"
-      ? ["Unit #", "Serial ID", "Verification URL", "QR Filename", "Status"]
+      ? [
+          "Unit #",
+          "Serial ID",
+          "Verification URL",
+          "QR Filename",
+          "Status",
+        ]
+      : generationMode === "UNPAIRED"
+      ? [
+          "Type",
+          "Unit #",
+          "Serial ID / Top Code",
+          "Hidden Serial ID",
+          "QR Filename",
+          "Status",
+        ]
       : [
           "Unit #",
           "Bottle Serial ID",
@@ -59,37 +75,71 @@ export async function GET(
           "Status",
         ]
 
-  const rows = batch.bottles.map((bottle, i) => {
-    // Signed bottle URL
-    const bottleUrl = buildVerifyUrl(bottle.serialId)
+  let rows: (string | number)[][] = []
 
-    if (authMode === "SINGLE") {
+  if (authMode === "SINGLE") {
+    rows = batch.bottles.map((bottle, i) => [
+      i + 1,
+      bottle.serialId,
+      buildVerifyUrl(bottle.serialId),
+      `PRODUCT_${bottle.serialId}.png`,
+      bottle.status,
+    ])
+  } else if (generationMode === "UNPAIRED") {
+    const bottleRows: (string | number)[][] = batch.bottles.map(
+      (bottle, i) => [
+        "BOTTLE",
+        i + 1,
+        bottle.serialId,
+        "",
+        `BOTTLE_${bottle.serialId}.png`,
+        bottle.status,
+      ]
+    )
+
+    const unpairedCaps = await prisma.cap.findMany({
+     where: {
+  batchId: batch.id,
+  bottleId: { equals: null },
+},
+      select: {
+        topCode: true,
+        hiddenSerialId: true,
+        status: true,
+      },
+    })
+
+    const capRows: (string | number)[][] = unpairedCaps.map((cap, i) => [
+      "CAP",
+      i + 1,
+      cap.topCode,
+      cap.hiddenSerialId,
+      `CAP_${cap.hiddenSerialId}.png`,
+      cap.status,
+    ])
+
+    rows = [...bottleRows, ...capRows]
+  } else {
+    rows = batch.bottles.map((bottle, i) => {
+      const cap = (bottle as any).cap
+      const bottleUrl = buildVerifyUrl(bottle.serialId)
+      const capUrl = cap
+        ? buildCapVerifyUrl(cap.hiddenSerialId, bottle.serialId)
+        : ""
+
       return [
         i + 1,
         bottle.serialId,
         bottleUrl,
-        `PRODUCT_${bottle.serialId}.png`,
+        `BOTTLE_${bottle.serialId}.png`,
+        cap?.topCode ?? "",
+        cap?.hiddenSerialId ?? "",
+        capUrl,
+        cap ? `CAP_${cap.hiddenSerialId}.png` : "",
         bottle.status,
       ]
-    }
-
-    // Signed cap URL with bottle pairing
-    const capUrl = bottle.cap
-      ? buildCapVerifyUrl(bottle.cap.hiddenSerialId, bottle.serialId)
-      : ""
-
-    return [
-      i + 1,
-      bottle.serialId,
-      bottleUrl,
-      `BOTTLE_${bottle.serialId}.png`,
-      bottle.cap?.topCode ?? "",
-      bottle.cap?.hiddenSerialId ?? "",
-      capUrl,
-      bottle.cap ? `CAP_${bottle.cap.hiddenSerialId}.png` : "",
-      bottle.status,
-    ]
-  })
+    })
+  }
 
   const csv = [
     `# VerifyChain Africa — Serial Export`,
@@ -97,6 +147,7 @@ export async function GET(
     `# Product: ${productName}`,
     `# Batch: ${batch.batchCode}`,
     `# Auth Mode: ${authMode}`,
+    `# Generation Mode: ${generationMode}`,
     `# Units: ${batch.bottles.length}`,
     `# Region: ${batch.targetRegion ?? "Not specified"}`,
     `# Generated: ${new Date().toISOString()}`,

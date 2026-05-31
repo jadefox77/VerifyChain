@@ -6,13 +6,11 @@ import {
   generateSerialId,
   generateTopCapCode,
   generateHiddenSerialId,
+  buildCapVerifyUrl,
 } from "@/lib/serial"
 import { redirect } from "next/navigation"
-import crypto from "crypto"
+import nodeCrypto from "crypto"
 import { makeManufacturerCode } from "@/lib/batch-naming"
-
-
-// ── Batch generation ──────────────────────────────────────────────────────────
 
 export async function generateBatch(formData: FormData) {
   const session = await auth()
@@ -27,31 +25,34 @@ export async function generateBatch(formData: FormData) {
   const quantity = parseInt(formData.get("quantity") as string, 10)
   const notes = formData.get("notes") as string
   const targetRegion = formData.get("targetRegion") as string
+  const generationMode =
+    (formData.get("generationMode") as string) ?? "PRE_PAIRED"
 
-  if (!productId || isNaN(quantity) || quantity < 1 || quantity > 5000) return
+  if (!productId || isNaN(quantity) || quantity < 1 || quantity > 5000)
+    return
 
   const product = await prisma.product.findFirst({
     where: { id: productId, manufacturerId: manufacturer.id },
   })
   if (!product) return
 
-  // Generate a structured batch code
+  // Generate structured batch code
   const mfrCode = makeManufacturerCode(manufacturer.companyName)
   const date = new Date().toISOString().split("T")[0].replace(/-/g, "")
   const random = Math.random().toString(36).substring(2, 6).toUpperCase()
   const batchCode = `VC-${mfrCode}-${date}-${random}`
 
-  // Create the batch
   const batch = await prisma.batch.create({
-    data: {
-      manufacturerId: manufacturer.id,
-      productId,
-      bottleCount: quantity,
-      notes: notes || null,
-      targetRegion: targetRegion || null,
-      batchCode,
-    },
-  })
+  data: {
+    manufacturerId: manufacturer.id,
+    productId,
+    bottleCount: quantity,
+    notes: notes || null,
+    targetRegion: targetRegion || null,
+    batchCode,
+    generationMode, // may show type error until prisma generate runs
+  } as any,
+})
 
   // Generate bottles
   const bottlesData = Array.from({ length: quantity }, () => {
@@ -60,7 +61,7 @@ export async function generateBatch(formData: FormData) {
       serialId,
       batchId: batch.id,
       manufacturerId: manufacturer.id,
-      hmacSig: crypto
+      hmacSig: nodeCrypto
         .createHmac("sha256", process.env.QR_SECRET!)
         .update(serialId)
         .digest("hex"),
@@ -69,8 +70,8 @@ export async function generateBatch(formData: FormData) {
 
   await prisma.bottle.createMany({ data: bottlesData })
 
-  // Only generate caps for PAIRED mode products
-  if (product.authMode === "PAIRED") {
+  // ── PRE_PAIRED mode — link caps to bottles immediately ──────────────────
+  if (product.authMode === "PAIRED" && generationMode === "PRE_PAIRED") {
     const bottles = await prisma.bottle.findMany({
       where: { batchId: batch.id },
       select: { id: true },
@@ -82,15 +83,38 @@ export async function generateBatch(formData: FormData) {
         bottleId: bottle.id,
         topCode: generateTopCapCode(),
         hiddenSerialId,
-        hiddenHmacSig: crypto
+        hiddenHmacSig: nodeCrypto
           .createHmac("sha256", process.env.QR_SECRET!)
           .update(hiddenSerialId)
           .digest("hex"),
       }
     })
 
-    await prisma.cap.createMany({ data: capsData })
+    await prisma.cap.createMany({
+  data: capsData.map((cap) => ({
+    ...cap,
+    bottleId: undefined, // explicitly undefined not null for createMany
+  })) as any,
+})
   }
+  // ── UNPAIRED mode — generate cap identities without bottle links ────────
+  if (product.authMode === "PAIRED" && generationMode === "UNPAIRED") {
+    const capsData = Array.from({ length: quantity }, () => {
+  const hiddenSerialId = generateHiddenSerialId()
+  return {
+    topCode: generateTopCapCode(),
+    hiddenSerialId,
+    hiddenHmacSig: nodeCrypto
+      .createHmac("sha256", process.env.QR_SECRET!)
+      .update(hiddenSerialId)
+      .digest("hex"),
+    batchId: batch.id,
+    // bottleId omitted entirely — Prisma treats omitted optional as null
+  }
+})
+
+await prisma.cap.createMany({ data: capsData as any })
 
   redirect(`/dashboard/batches/${batch.id}`)
 }
+  }

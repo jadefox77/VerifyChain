@@ -2,8 +2,9 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { generateBatch } from "@/lib/actions/batches"
 import { Package, ChevronRight } from "lucide-react"
+import { BatchForm } from "@/components/dashboard/batch-form"
+
 
 export default async function BatchesPage() {
   const session = await auth()
@@ -57,138 +58,20 @@ export default async function BatchesPage() {
           </h3>
 
           {products.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-sm text-gray-500 mb-3">
-                No products yet. Create a product first.
-              </p>
-              <Link
-                href="/dashboard/products"
-                className="text-sm text-blue-500 hover:underline"
-              >
-                Go to Products →
-              </Link>
-            </div>
-          ) : (
-            <form action={generateBatch} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Product
-                </label>
-                <select
-                  name="productId"
-                  required
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
-                >
-                  <option value="">Select a product</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} —{" "}
-                      {p.authMode === "PAIRED"
-                        ? "Paired Auth"
-                        : "Single Auth"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Quantity
-                  <span className="text-gray-400 font-normal ml-1">
-                    (max 5,000)
-                  </span>
-                </label>
-                <input
-                  name="quantity"
-                  type="number"
-                  required
-                  min={1}
-                  max={5000}
-                  placeholder="e.g. 500"
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
-                />
-              </div>
-{/* Only show generation mode for paired products */}
-<div className="flex flex-col gap-1.5">
-  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-    Generation Mode
-  </label>
-  <select
-    name="generationMode"
-    defaultValue="PRE_PAIRED"
-    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
-  >
-    <option value="PRE_PAIRED">
-      Pre-Paired — Bottle and cap linked at generation
-    </option>
-    <option value="UNPAIRED">
-      Unpaired — Bottle and cap printed separately, paired on line
-    </option>
-  </select>
-  <div className="grid grid-cols-2 gap-2 mt-1">
-    <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
-      <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
-        Pre-Paired
-      </p>
-      <p className="text-[10px] text-gray-500 leading-relaxed">
-        Each bottle QR is matched to a specific cap QR at generation.
-        Best for integrated printing setups.
-      </p>
-    </div>
-    <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
-      <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
-        Unpaired
-      </p>
-      <p className="text-[10px] text-gray-500 leading-relaxed">
-        Bottle and cap QRs generated independently. Pairing recorded
-        on the production line via scanner or manual submit.
-      </p>
-    </div>
+  <div className="text-center py-8">
+    <p className="text-sm text-gray-500 mb-3">
+      No products yet. Create a product first.
+    </p>
+    <Link
+      href="/dashboard/products"
+      className="text-sm text-blue-500 hover:underline"
+    >
+      Go to Products →
+    </Link>
   </div>
-</div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Target Region
-                  <span className="text-gray-400 font-normal ml-1">
-                    (for drift detection)
-                  </span>
-                </label>
-                <select
-                  name="targetRegion"
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
-                >
-                  <option value="">Select region (optional)</option>
-                  {NIGERIAN_STATES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Notes
-                  <span className="text-gray-400 font-normal ml-1">
-                    (optional)
-                  </span>
-                </label>
-                <textarea
-                  name="notes"
-                  rows={2}
-                  placeholder="Production run notes..."
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500 resize-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full rounded-lg bg-gray-900 dark:bg-white px-4 py-2.5 text-sm font-semibold text-white dark:text-gray-900 shadow-sm transition hover:bg-gray-700 dark:hover:bg-gray-100 active:scale-95"
-              >
-                Generate Batch
-              </button>
-            </form>
-          )}
+) : (
+  <BatchForm products={products} />
+)}
         </div>
 
         {/* Batch list */}

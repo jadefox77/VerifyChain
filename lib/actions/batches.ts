@@ -70,6 +70,12 @@ export async function generateBatch(formData: FormData) {
 
   await prisma.bottle.createMany({ data: bottlesData })
 
+const bottles = await prisma.bottle.findMany({
+  where: { batchId: batch.id },
+  select: { id: true },
+})
+
+
   // ── PRE_PAIRED mode — link caps to bottles immediately ──────────────────
   if (product.authMode === "PAIRED" && generationMode === "PRE_PAIRED") {
     const bottles = await prisma.bottle.findMany({
@@ -114,13 +120,8 @@ export async function generateBatch(formData: FormData) {
 })
 
 await prisma.cap.createMany({ data: capsData as any })
-console.log("[batch] generationMode:", generationMode)
-console.log("[batch] authMode:", product.authMode)
-console.log("[batch] creating caps for", bottlesData.length, "bottles")
 
   redirect(`/dashboard/batches/${batch.id}`)
 }
-
-
   }
 

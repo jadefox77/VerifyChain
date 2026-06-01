@@ -34,6 +34,15 @@ export async function GET(
     },
   })
 
+  console.log("Batch bottles sample:", JSON.stringify(
+  batch.bottles.slice(0, 1).map(b => ({
+    id: b.id,
+    serialId: b.serialId,
+    cap: (b as any).cap,
+  })),
+  null, 2
+))
+
   if (!batch) {
     return Response.json({ error: "Batch not found" }, { status: 404 })
   }

@@ -35,7 +35,7 @@ export async function GET(
   })
 
   console.log("Batch bottles sample:", JSON.stringify(
-  batch.bottles.slice(0, 1).map(b => ({
+  batch?.bottles.slice(0, 1).map(b => ({
     id: b.id,
     serialId: b.serialId,
     cap: (b as any).cap,

@@ -114,7 +114,13 @@ export async function generateBatch(formData: FormData) {
 })
 
 await prisma.cap.createMany({ data: capsData as any })
+console.log("[batch] generationMode:", generationMode)
+console.log("[batch] authMode:", product.authMode)
+console.log("[batch] creating caps for", bottlesData.length, "bottles")
 
   redirect(`/dashboard/batches/${batch.id}`)
 }
+
+
   }
+

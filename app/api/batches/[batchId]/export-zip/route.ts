@@ -118,19 +118,19 @@ export async function GET(
       })
       bottleFolder.file(`BOTTLE_${bottle.serialId}.png`, bottleQr)
 
-      const cap = (bottle as any).cap
-      if (cap) {
-        const capUrl = buildCapVerifyUrl(
-          cap.hiddenSerialId,
-          bottle.serialId
-        )
-        const capQr = await QRCode.toBuffer(capUrl, {
-          errorCorrectionLevel: "H",
-          width: 400,
-          margin: 2,
-        })
-        capFolder.file(`CAP_${cap.hiddenSerialId}.png`, capQr)
-      }
+      
+   if (bottle.cap) {
+  const capUrl = buildCapVerifyUrl(
+    bottle.cap.hiddenSerialId,
+    bottle.serialId
+  )
+  const capQr = await QRCode.toBuffer(capUrl, {
+    errorCorrectionLevel: "H",
+    width: 400,
+    margin: 2,
+  })
+  capFolder.file(`CAP_${bottle.cap.hiddenSerialId}.png`, capQr)
+}
     }
   }
 

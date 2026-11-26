@@ -44,7 +44,7 @@ function redirectToSignIn(req: NextRequest): NextResponse {
   return NextResponse.redirect(url)
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
   // Fully public paths — no token needed
@@ -54,7 +54,6 @@ export async function middleware(req: NextRequest) {
     "/verify",
     "/api/verify",
     "/api/verify-cap",
-    "/api/whatsapp",
     "/api/auth",
   ]
 

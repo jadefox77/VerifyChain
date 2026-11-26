@@ -325,7 +325,8 @@ model ScanLog {
   region      String?  // State/province
 
   // Channel
-  channel     String?  // "whatsapp" | "qr_direct" | "api"
+  channel     String?  // "web" | "api"
+  ipHash      String?  // Keyed hash of the client IP, never the raw IP
   userAgent   String?
 
   // Timing
@@ -337,6 +338,7 @@ model ScanLog {
   @@index([fraudFlag])
   @@index([scannedAt])
   @@index([lat, lng])
+  @@index([ipHash, scannedAt])
 }
 
 // =============================================================================

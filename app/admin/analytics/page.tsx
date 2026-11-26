@@ -8,7 +8,6 @@ import {
   Zap,
   TrendingUp,
   MapPin,
-  Smartphone,
 } from "lucide-react"
 
 export const revalidate = 30
@@ -50,9 +49,6 @@ async function getAnalyticsData() {
   // ── Batch 3 — engagement metrics ─────────────────────────────────────────
   const firstOpenEvents = await prisma.cap.count({
     where: { status: "OPENED" },
-  })
-  const whatsappScans = await prisma.scanLog.count({
-    where: { channel: "whatsapp" },
   })
   const repeatScans = await prisma.scanLog.count({
     where: {
@@ -131,8 +127,6 @@ async function getAnalyticsData() {
     repeatScans,
     bottleLayerScans,
     capLayerScans,
-    whatsappScans,
-    directScans: totalScansAllTime - whatsappScans,
     dailyScans,
     topRegions,
     hourlyDistribution,
@@ -241,7 +235,7 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Secondary metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {[
           {
             label: "Genuine Scans",
@@ -254,12 +248,6 @@ export default async function AnalyticsPage() {
             value: data.fraudScans.toLocaleString(),
             icon: ShieldX,
             color: "text-red-400",
-          },
-          {
-            label: "WhatsApp Scans",
-            value: data.whatsappScans.toLocaleString(),
-            icon: Smartphone,
-            color: "text-blue-400",
           },
           {
             label: "Repeat Scans",
@@ -399,49 +387,6 @@ export default async function AnalyticsPage() {
               )
             })}
 
-            <div className="pt-3 border-t border-gray-800/40 space-y-3">
-              <h3 className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
-                Channel
-              </h3>
-              {[
-                {
-                  label: "WhatsApp",
-                  value: data.whatsappScans,
-                  color: "bg-green-500/50",
-                },
-                {
-                  label: "Direct QR",
-                  value: data.directScans,
-                  color: "bg-blue-500/30",
-                },
-              ].map((item) => {
-                const pct =
-                  data.totalScansAllTime > 0
-                    ? (
-                        (item.value / data.totalScansAllTime) *
-                        100
-                      ).toFixed(1)
-                    : "0.0"
-                return (
-                  <div key={item.label}>
-                    <div className="flex justify-between mb-1.5">
-                      <span className="text-xs text-gray-400">
-                        {item.label}
-                      </span>
-                      <span className="text-xs font-mono text-gray-500">
-                        {item.value.toLocaleString()} ({pct}%)
-                      </span>
-                    </div>
-                    <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${item.color}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
           </div>
         </div>
 

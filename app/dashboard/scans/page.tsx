@@ -208,15 +208,7 @@ export default async function ScansPage({
                     {/* Channel */}
                     <td className="px-4 py-3">
                       <span className="text-[10px] font-mono text-gray-500">
-                        {log.channel === "whatsapp" ? (
-                          <span className="text-green-600 dark:text-green-400">
-                            WhatsApp
-                          </span>
-                        ) : log.channel ? (
-                          log.channel
-                        ) : (
-                          "Direct QR"
-                        )}
+                        {log.channel ?? "Direct QR"}
                       </span>
                     </td>
 

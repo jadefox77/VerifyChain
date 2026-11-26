@@ -61,7 +61,7 @@ export default async function DashboardPage() {
   ])
 
   // Batch 4
-  const [pairedProducts, singleProducts, whatsappScans] =
+  const [pairedProducts, singleProducts] =
     await Promise.all([
       prisma.product.count({
         where: {
@@ -73,12 +73,6 @@ export default async function DashboardPage() {
         where: {
           manufacturerId: manufacturer.id,
           authMode: "SINGLE",
-        },
-      }),
-      prisma.scanLog.count({
-        where: {
-          manufacturerId: manufacturer.id,
-          channel: "whatsapp",
         },
       }),
     ])
@@ -239,7 +233,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Secondary stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {[
           {
             label: "Active Batches",
@@ -252,12 +246,6 @@ export default async function DashboardPage() {
             value: openedBottles.toLocaleString(),
             icon: Zap,
             sub: "Confirmed genuine",
-          },
-          {
-            label: "WhatsApp Scans",
-            value: whatsappScans.toLocaleString(),
-            icon: Scan,
-            sub: "Via WhatsApp channel",
           },
           {
             label: "Fraud Flags",

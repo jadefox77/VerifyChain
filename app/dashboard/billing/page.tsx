@@ -28,13 +28,11 @@ const PLAN_FEATURES: Record<string, string[]> = {
   FREE: [
     "Up to 5,000 bottles/month",
     "Basic verification",
-    "WhatsApp integration",
     "Standard support",
   ],
   STARTER: [
     "Up to 50,000 bottles/month",
     "Full fraud detection",
-    "WhatsApp integration",
     "Scan analytics",
     "Email support",
   ],

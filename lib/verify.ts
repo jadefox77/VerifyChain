@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma"
+import type { ScanMeta } from "@/lib/verify-cap"
 
 type VerifyInput = {
   serialId: string
   lat?: number
   lng?: number
+  meta?: ScanMeta
 }
 
-type VerifyResult =
+export type VerifyResult =
   | {
       status: "PROMPT_CAP"
       message: string
@@ -39,7 +41,7 @@ type VerifyResult =
 export async function verifyBottle(
   input: VerifyInput
 ): Promise<VerifyResult> {
-  const { serialId, lat, lng } = input
+  const { serialId, lat, lng, meta } = input
 
   const bottle = await prisma.bottle.findUnique({
     where: { serialId },
@@ -86,6 +88,9 @@ export async function verifyBottle(
       scanLayer: "BOTTLE",
       fraudFlag: false,
       flagReason: null,
+      channel: meta?.channel ?? null,
+      ipHash: meta?.ipHash ?? null,
+      userAgent: meta?.userAgent ?? null,
     },
   })
 
@@ -93,7 +98,14 @@ export async function verifyBottle(
   // No cap required — verify immediately on first scan
 
   if (authMode === "SINGLE") {
-    if (bottle.status === "OPENED") {
+    // Atomic claim: only one scan can move the unit out of MINT, so two
+    // simultaneous scans cannot both be told the product is genuine.
+    const claim = await prisma.bottle.updateMany({
+      where: { id: bottle.id, status: "MINT" },
+      data: { status: "OPENED" },
+    })
+
+    if (claim.count === 0) {
       return {
         status: "ALREADY_VERIFIED",
         message:
@@ -102,12 +114,6 @@ export async function verifyBottle(
         authMode: "SINGLE",
       }
     }
-
-    // Mark as opened
-    await prisma.bottle.update({
-      where: { id: bottle.id },
-      data: { status: "OPENED" },
-    })
 
     return {
       status: "GENUINE_SINGLE",
@@ -145,6 +151,9 @@ export async function verifyBottle(
         fraudFlag: true,
         flagReason:
           "Cap already opened before bottle QR scanned — possible refill",
+        channel: meta?.channel ?? null,
+        ipHash: meta?.ipHash ?? null,
+        userAgent: meta?.userAgent ?? null,
       },
     })
 

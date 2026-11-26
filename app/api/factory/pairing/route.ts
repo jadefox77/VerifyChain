@@ -17,10 +17,12 @@ function verifyFactoryToken(
     .createHmac("sha256", secret)
     .update(payload)
     .digest("hex")
-  return crypto.timingSafeEqual(
-    Buffer.from(expected),
-    Buffer.from(token)
-  )
+  const a = Buffer.from(expected)
+  const b = Buffer.from(token)
+  // timingSafeEqual throws when lengths differ, which used to turn a bad
+  // token into a 500 instead of a 401.
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(a, b)
 }
 
 // ── POST — Automatic scanner submission ───────────────────────────────────────

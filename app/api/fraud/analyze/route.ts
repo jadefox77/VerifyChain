@@ -25,8 +25,14 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const cronSecret = req.headers.get("x-cron-secret")
-  if (cronSecret !== process.env.CRON_SECRET) {
+  // Vercel Cron sends "Authorization: Bearer <CRON_SECRET>".
+  // x-cron-secret is still accepted for manual runs.
+  const secret = process.env.CRON_SECRET
+  const bearer = req.headers.get("authorization")
+  const manual = req.headers.get("x-cron-secret")
+  const authorized =
+    Boolean(secret) && (bearer === `Bearer ${secret}` || manual === secret)
+  if (!authorized) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
 

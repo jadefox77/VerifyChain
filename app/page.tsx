@@ -46,7 +46,7 @@ export default async function HomePage() {
 
         <p className="text-lg text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
           VerifyChain gives every bottle a unique digital identity.
-          Consumers verify authenticity instantly via WhatsApp.
+          Consumers verify authenticity instantly by scanning a QR code.
           Manufacturers get real-time fraud intelligence.
         </p>
 
@@ -88,9 +88,9 @@ export default async function HomePage() {
               {
                 step: "02",
                 icon: "📱",
-                title: "Scan via WhatsApp",
+                title: "Scan with your camera",
                 description:
-                  "Scan the QR code with your phone camera or send the serial code to our WhatsApp number.",
+                  "Point your phone camera at the QR code. The result opens in your browser.",
               },
               {
                 step: "03",
@@ -135,10 +135,10 @@ export default async function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[
               {
-                icon: "💬",
-                title: "WhatsApp-native",
+                icon: "📷",
+                title: "No app needed",
                 description:
-                  "No app to download. Works on any phone that runs WhatsApp — which is nearly every phone in Nigeria.",
+                  "Works with any smartphone camera and browser. Nothing to download, no account to create.",
               },
               {
                 icon: "🔒",

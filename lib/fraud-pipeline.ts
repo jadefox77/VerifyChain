@@ -1,6 +1,6 @@
 // =============================================================================
-// VerifyChain Africa — AI Fraud Intelligence Pipeline
-// Runs hourly via cron + on-demand via admin portal
+// VerifyChain Africa — Rule-based Fraud Detection Pipeline
+// Full pipeline runs daily via Vercel cron; a fast subset runs on demand from the admin portal
 // =============================================================================
 
 import { prisma } from "@/lib/prisma"
@@ -14,7 +14,7 @@ const VELOCITY_SUSPICIOUS = 3      // scans of same bottle in 24hrs
 const VELOCITY_HIGH_CONCERN = 10   // scans of same bottle in 24hrs
 const TELEPORT_SPEED_KMH = 500     // impossible travel speed threshold
 const DRIFT_RADIUS_KM = 300        // supply chain drift threshold
-const BOT_SCAN_COUNT = 50          // scans from same channel in 2 minutes
+const BOT_SCAN_COUNT = 50          // scans from the same source (hashed IP) in 2 minutes
 const BOT_TIME_WINDOW_MS = 2 * 60 * 1000
 
 // ── Haversine ────────────────────────────────────────────────────────────────
@@ -374,15 +374,15 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
   }
 
   // ── 4. Bot behavior detection ─────────────────────────────────────────────
-  // Same channel scanning many different bottles in a very short window
+  // Same source (hashed IP) scanning many bottles in a very short window
 
   const recentScans = await prisma.scanLog.findMany({
     where: {
-      channel: { not: null },
+      ipHash: { not: null },
       scannedAt: { gte: new Date(Date.now() - BOT_TIME_WINDOW_MS) },
     },
     select: {
-      channel: true,
+      ipHash: true,
       bottleId: true,
       scannedAt: true,
       manufacturerId: true,
@@ -390,16 +390,16 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
     orderBy: { scannedAt: "asc" },
   })
 
-  // Group by channel
-  const byChannel: Record<string, typeof recentScans> = {}
-  
+  // Group by source
+  const bySource: Record<string, typeof recentScans> = {}
+
   for (const scan of recentScans) {
-    if (!scan.channel) continue
-    if (!byChannel[scan.channel]) byChannel[scan.channel] = []
-    byChannel[scan.channel].push(scan)
+    if (!scan.ipHash) continue
+    if (!bySource[scan.ipHash]) bySource[scan.ipHash] = []
+    bySource[scan.ipHash].push(scan)
   }
 
-  for (const [channel, scans] of Object.entries(byChannel)) {
+  for (const [source, scans] of Object.entries(bySource)) {
     if (scans.length < BOT_SCAN_COUNT) continue
 
     checks.bot++
@@ -426,9 +426,9 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
           type: "BOT_ACTIVITY",
           severity: "HIGH_CONCERN",
           manufacturerId,
-          message: `${scans.length} scans from channel "${channel}" in under 2 minutes — possible automated scanning`,
+          message: `${scans.length} scans from one source in under 2 minutes — possible automated scanning`,
           detail: JSON.stringify({
-            channel,
+            sourceHash: source.slice(0, 12),
             scanCount: scans.length,
             uniqueBottles,
             windowMs: BOT_TIME_WINDOW_MS,

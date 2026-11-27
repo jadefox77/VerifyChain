@@ -1,17 +1,9 @@
 // =============================================================================
-// Nigerian regions — one shared list for the batch form, the live scan check
-// and the nightly fraud pipeline. Keys match the batch form options exactly.
+// Nigerian regions: one shared list of coordinates for the live cap check and
+// the daily fraud pipeline. Keys match the values the batch form saves (see
+// NIGERIAN_STATES in lib/nigeria.ts), so all 37 states and the FCT are covered.
 // Coordinates are each state capital (approximate).
 // =============================================================================
-
-export const NIGERIAN_STATES = [
-  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa",
-  "Benue", "Borno", "Cross River", "Delta", "Ebonyi", "Edo",
-  "Ekiti", "Enugu", "FCT — Abuja", "Gombe", "Imo", "Jigawa",
-  "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara",
-  "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun",
-  "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
-] as const
 
 type Coords = { lat: number; lng: number }
 
@@ -30,7 +22,7 @@ const STATE_COORDS: Record<string, Coords> = {
   "Edo": { lat: 6.335, lng: 5.6037 },           // Benin City
   "Ekiti": { lat: 7.6233, lng: 5.2209 },        // Ado-Ekiti
   "Enugu": { lat: 6.4584, lng: 7.5464 },
-  "FCT — Abuja": { lat: 9.0765, lng: 7.3986 },
+  "Abuja": { lat: 9.0765, lng: 7.3986 },        // FCT
   "Gombe": { lat: 10.2897, lng: 11.1673 },
   "Imo": { lat: 5.484, lng: 7.0351 },           // Owerri
   "Jigawa": { lat: 11.7562, lng: 9.3388 },      // Dutse
@@ -55,15 +47,17 @@ const STATE_COORDS: Record<string, Coords> = {
   "Zamfara": { lat: 12.1628, lng: 6.6614 },     // Gusau
 }
 
-// Older batches may have been saved with a short name.
+// Other spellings of the FCT that may be saved on older batches.
 const ALIASES: Record<string, string> = {
-  Abuja: "FCT — Abuja",
-  FCT: "FCT — Abuja",
+  FCT: "Abuja",
+  "FCT (Abuja)": "Abuja",
+  "FCT - Abuja": "Abuja",
 }
 
 export function regionCoords(region: string | null | undefined): Coords | null {
   if (!region) return null
-  const key = ALIASES[region] ?? region
+  const trimmed = region.trim()
+  const key = ALIASES[trimmed] ?? trimmed
   return STATE_COORDS[key] ?? null
 }
 

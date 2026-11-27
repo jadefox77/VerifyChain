@@ -17,6 +17,10 @@ import { Notice } from "@/components/ui/auth-shell"
 
 export const metadata: Metadata = { title: "Batches" }
 
+// The batch form's server action runs under this page. Creating a 5,000 unit
+// batch in one transaction can take longer than the default limit.
+export const maxDuration = 60
+
 const regionLabel = (r: string) => NIGERIAN_STATES.find((s) => s.value === r)?.label ?? r
 
 export default async function BatchesPage({

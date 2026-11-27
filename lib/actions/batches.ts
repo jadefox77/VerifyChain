@@ -48,74 +48,86 @@ export async function generateBatch(formData: FormData) {
   const random = Math.random().toString(36).substring(2, 6).toUpperCase()
   const batchCode = `VC-${mfrCode}-${date}-${random}`
 
-  const batch = await prisma.batch.create({
-    data: {
-      manufacturerId: manufacturer.id,
-      productId,
-      bottleCount: quantity,
-      notes: notes || null,
-      targetRegion: targetRegion || null,
-      batchCode,
-      generationMode,
+  // The batch, its bottles and its caps are written in one transaction. If
+  // anything fails or times out halfway, nothing is saved, so there are never
+  // bottles without caps. A 5,000 unit batch takes a few seconds, so the
+  // transaction gets up to 50 seconds (the page allows 60, see maxDuration
+  // in app/dashboard/batches/page.tsx).
+  const batch = await prisma.$transaction(
+    async (tx) => {
+      const batch = await tx.batch.create({
+        data: {
+          manufacturerId: manufacturer.id,
+          productId,
+          bottleCount: quantity,
+          notes: notes || null,
+          targetRegion: targetRegion || null,
+          batchCode,
+          generationMode,
+        },
+      })
+
+      // Generate bottles
+      const bottlesData = Array.from({ length: quantity }, () => {
+        const serialId = generateSerialId()
+        return {
+          serialId,
+          batchId: batch.id,
+          manufacturerId: manufacturer.id,
+          hmacSig: nodeCrypto
+            .createHmac("sha256", process.env.QR_SECRET!)
+            .update(serialId)
+            .digest("hex"),
+        }
+      })
+
+      await tx.bottle.createMany({ data: bottlesData })
+
+      // Pre-paired: link each cap directly to its bottle
+      if (product.authMode === "PAIRED" && generationMode === "PRE_PAIRED") {
+        const bottles = await tx.bottle.findMany({
+          where: { batchId: batch.id },
+          select: { id: true },
+        })
+
+        const capsData = bottles.map((bottle) => {
+          const hiddenSerialId = generateHiddenSerialId()
+          return {
+            bottleId: bottle.id,
+            topCode: generateTopCapCode(),
+            hiddenSerialId,
+            hiddenHmacSig: nodeCrypto
+              .createHmac("sha256", process.env.QR_SECRET!)
+              .update(hiddenSerialId)
+              .digest("hex"),
+          }
+        })
+
+        await tx.cap.createMany({ data: capsData })
+      }
+
+      // Unpaired: cap identities with no bottle yet, linked on the production line
+      if (product.authMode === "PAIRED" && generationMode === "UNPAIRED") {
+        const capsData = Array.from({ length: quantity }, () => {
+          const hiddenSerialId = generateHiddenSerialId()
+          return {
+            topCode: generateTopCapCode(),
+            hiddenSerialId,
+            hiddenHmacSig: nodeCrypto
+              .createHmac("sha256", process.env.QR_SECRET!)
+              .update(hiddenSerialId)
+              .digest("hex"),
+            batchId: batch.id,
+          }
+        })
+
+        await tx.cap.createMany({ data: capsData })
+      }
+
+      return batch
     },
-  })
-
-  // Generate bottles
-  const bottlesData = Array.from({ length: quantity }, () => {
-    const serialId = generateSerialId()
-    return {
-      serialId,
-      batchId: batch.id,
-      manufacturerId: manufacturer.id,
-      hmacSig: nodeCrypto
-        .createHmac("sha256", process.env.QR_SECRET!)
-        .update(serialId)
-        .digest("hex"),
-    }
-  })
-
-  await prisma.bottle.createMany({ data: bottlesData })
-
-  // Pre-paired: link each cap directly to its bottle
-  if (product.authMode === "PAIRED" && generationMode === "PRE_PAIRED") {
-    const bottles = await prisma.bottle.findMany({
-      where: { batchId: batch.id },
-      select: { id: true },
-    })
-
-    const capsData = bottles.map((bottle) => {
-      const hiddenSerialId = generateHiddenSerialId()
-      return {
-        bottleId: bottle.id,
-        topCode: generateTopCapCode(),
-        hiddenSerialId,
-        hiddenHmacSig: nodeCrypto
-          .createHmac("sha256", process.env.QR_SECRET!)
-          .update(hiddenSerialId)
-          .digest("hex"),
-      }
-    })
-
-    await prisma.cap.createMany({ data: capsData })
-  }
-
-  // Unpaired: cap identities with no bottle yet, linked on the production line
-  if (product.authMode === "PAIRED" && generationMode === "UNPAIRED") {
-    const capsData = Array.from({ length: quantity }, () => {
-      const hiddenSerialId = generateHiddenSerialId()
-      return {
-        topCode: generateTopCapCode(),
-        hiddenSerialId,
-        hiddenHmacSig: nodeCrypto
-          .createHmac("sha256", process.env.QR_SECRET!)
-          .update(hiddenSerialId)
-          .digest("hex"),
-        batchId: batch.id,
-      }
-    })
-
-    await prisma.cap.createMany({ data: capsData })
-  }
+    { maxWait: 10_000, timeout: 50_000 }
+  )
 
   redirect(`/dashboard/batches/${batch.id}`)
 }

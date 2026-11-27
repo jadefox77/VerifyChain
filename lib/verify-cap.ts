@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client"
+import { DRIFT_RADIUS_KM, haversineKm, regionCoords } from "@/lib/regions"
 import { prisma } from "@/lib/prisma"
 
 export type ScanMeta = {
@@ -27,32 +28,6 @@ export type CapVerifyResult =
   | { status: "FLAGGED"; message: string; reason: string }
   | { status: "MISMATCH"; message: string }
   | { status: "NOT_FOUND"; message: string }
-
-const DRIFT_RADIUS_KM = 300
-
-const REGION_COORDS: Record<string, { lat: number; lng: number }> = {
-  Lagos: { lat: 6.5244, lng: 3.3792 },
-  Abuja: { lat: 9.0765, lng: 7.3986 },
-  Kano: { lat: 12.0022, lng: 8.592 },
-  Rivers: { lat: 4.8156, lng: 7.0498 },
-  Oyo: { lat: 7.3775, lng: 3.947 },
-  Edo: { lat: 6.335, lng: 5.6037 },
-  Anambra: { lat: 6.2104, lng: 6.9623 },
-  Kaduna: { lat: 10.5264, lng: 7.4384 },
-  Delta: { lat: 5.5329, lng: 5.8987 },
-}
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLng = ((lng2 - lng1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
 
 function hasCoords(lat?: number, lng?: number): lat is number {
   return typeof lat === "number" && typeof lng === "number"
@@ -143,8 +118,8 @@ async function checkCap(
   // Supply chain drift
   let driftReason: string | null = null
   const target = bottle.batch.targetRegion
-  if (hasCoords(lat, lng) && target && REGION_COORDS[target]) {
-    const t = REGION_COORDS[target]
+  const t = regionCoords(target)
+  if (hasCoords(lat, lng) && target && t) {
     const driftKm = haversineKm(t.lat, t.lng, lat, lng!)
     if (driftKm > DRIFT_RADIUS_KM) {
       driftReason = `Supply chain drift: batch intended for ${target} but scanned ${Math.round(driftKm)}km away`

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { Package } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireManufacturerUser } from "@/lib/current-user"
 import { PageHeader } from "@/components/ui/page-header"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -173,6 +174,7 @@ async function createProduct(formData: FormData) {
 
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
+  await requireManufacturerUser(session.user.id)
 
   const manufacturer = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },

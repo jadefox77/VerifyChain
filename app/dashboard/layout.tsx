@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
-import { auth, signOut } from "@/lib/auth"
+import { auth, signOut, ADMIN_ROLES, MANUFACTURER_ROLES } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/current-user"
 import { prisma } from "@/lib/prisma"
 import { Sidebar } from "@/components/sidebar"
 
@@ -15,7 +16,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  if (session.user.mustResetPassword) redirect("/auth/reset-password")
+  // Read the role from the database, not the login token, which can be up to
+  // 7 days old. A user whose role was changed or removed loses access now.
+  const user = await getCurrentUser(session.user.id)
+  if (!user) redirect("/login")
+  if (user.mustResetPassword) redirect("/auth/reset-password")
+  if (!MANUFACTURER_ROLES.includes(user.role)) {
+    redirect(ADMIN_ROLES.includes(user.role) ? "/admin" : "/unauthorized")
+  }
 
   const manufacturer = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },

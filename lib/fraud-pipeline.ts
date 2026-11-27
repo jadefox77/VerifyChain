@@ -1,6 +1,6 @@
 // =============================================================================
-// VerifyChain Africa — Rule-based Fraud Detection Pipeline
-// Full pipeline runs daily via Vercel cron; a fast subset runs on demand from the admin portal
+// VerifyChain Africa: rule-based fraud detection pipeline
+// The full pipeline runs daily from the Vercel cron; a fast subset (fraud rates only) runs on demand from the admin portal
 // =============================================================================
 
 import { prisma } from "@/lib/prisma"
@@ -25,6 +25,13 @@ const BOT_SCAN_COUNT = 50          // scans from the same device in 2 minutes
 // that throw away their device cookie.
 const BOT_IP_SCAN_COUNT = 300      // scans from the same hashed IP in 2 minutes
 const BOT_TIME_WINDOW_MS = 2 * 60 * 1000
+// A single-mode code scanned from this many different sources is likely copied.
+const CLONE_MIN_SOURCES = 2
+const CLONE_HIGH_CONCERN = 5
+const CLONE_CRITICAL = 20
+// Upper bound on rows one rule reads per run, so a flood of scans cannot run
+// the job out of memory or time. Far above current daily volume.
+const MAX_SCANS_PER_RULE = 100_000
 
 // ── Pipeline result type ──────────────────────────────────────────────────────
 
@@ -35,6 +42,7 @@ export type PipelineResult = {
   manufacturers_updated: number
   checks: {
     velocity: number
+    cloning: number
     teleportation: number
     drift: number
     bot: number
@@ -53,6 +61,7 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
   let alertsCreated = 0
   const checks = {
     velocity: 0,
+    cloning: 0,
     teleportation: 0,
     drift: 0,
     bot: 0,
@@ -102,7 +111,7 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
             batch: {
               select: {
                 batchCode: true,
-                product: { select: { name: true } },
+                product: { select: { name: true, authMode: true } },
               },
             },
           },
@@ -110,23 +119,24 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
       ])
     : [[], []]
 
-  // A scan with neither hash (an old record, or no QR_SECRET) counts as its
-  // own source, so it is never merged with another scan.
   const sourcesByBottle = new Map<string, Set<string>>()
   const tapsByBottle = new Map<string, number>()
   for (const scan of candidateScans) {
     if (!scan.bottleId) continue
-    const source = scan.deviceHash
-      ? `device:${scan.deviceHash}`
-      : scan.ipHash
-        ? `ip:${scan.ipHash}`
-        : `scan:${scan.id}`
+    const source = sourceKey(scan)
     if (!sourcesByBottle.has(scan.bottleId)) sourcesByBottle.set(scan.bottleId, new Set())
     sourcesByBottle.get(scan.bottleId)!.add(source)
     tapsByBottle.set(scan.bottleId, (tapsByBottle.get(scan.bottleId) ?? 0) + 1)
   }
 
+  const repeatOpen = await openAlertMessages(
+    "REPEAT_SCAN_ABUSE",
+    candidateBottles.map((b) => b.manufacturerId)
+  )
+
   for (const bottle of candidateBottles) {
+    // Single-mode codes are covered by the copied-code rule below.
+    if (bottle.batch?.product?.authMode === "SINGLE") continue
     const sourceCount = sourcesByBottle.get(bottle.id)?.size ?? 0
     if (sourceCount < VELOCITY_SUSPICIOUS) continue
     checks.velocity++
@@ -137,14 +147,7 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
     const confidence = Math.min(0.5 + (sourceCount / 20) * 0.5, 0.99)
 
     // Skip if there is already an unresolved alert for this bottle
-    const existingAlert = await prisma.alertLog.findFirst({
-      where: {
-        type: "REPEAT_SCAN_ABUSE",
-        manufacturerId: bottle.manufacturerId,
-        resolved: false,
-        message: { contains: bottle.serialId },
-      },
-    })
+    const existingAlert = repeatOpen.some((m) => m.includes(bottle.serialId))
 
     if (!existingAlert) {
       await prisma.alertLog.create({
@@ -170,224 +173,300 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
     }
   }
 
-  // ── 2. Geographic teleportation detection ─────────────────────────────────
-  // Find consecutive scans of the same bottle at impossible speeds
+  // ── 2. Copied single-mode codes ───────────────────────────────────────────
+  // A single-mode code has no cap, so the first scan of a copy says
+  // "Genuine". The only sign of copying is the same code being scanned from
+  // more than one source. Bottles scanned in the last 24 hours are checked
+  // against all of their label scans, so a copy scanned days after the real
+  // one is still caught.
 
-  const bottlesWithMultipleLocations = await prisma.scanLog.groupBy({
-    by: ["bottleId"],
-    _count: true,
+  const singleCandidates = await prisma.scanLog.findMany({
+    where: {
+      scanLayer: "BOTTLE",
+      scannedAt: { gte: since },
+      bottleId: { not: null },
+      bottle: { batch: { product: { authMode: "SINGLE" } } },
+    },
+    select: { bottleId: true },
+    distinct: ["bottleId"],
+  })
+  const singleIds = singleCandidates
+    .map((c) => c.bottleId)
+    .filter((id): id is string => Boolean(id))
+
+  if (singleIds.length > 0) {
+    const [singleScans, singleBottles] = await Promise.all([
+      prisma.scanLog.findMany({
+        where: { bottleId: { in: singleIds }, scanLayer: "BOTTLE" },
+        select: { id: true, bottleId: true, deviceHash: true, ipHash: true, scannedAt: true },
+      }),
+      prisma.bottle.findMany({
+        where: { id: { in: singleIds } },
+        select: {
+          id: true,
+          serialId: true,
+          manufacturerId: true,
+          batchId: true,
+          batch: { select: { batchCode: true, product: { select: { name: true } } } },
+        },
+      }),
+    ])
+
+    const sources = new Map<string, Set<string>>()
+    for (const scan of singleScans) {
+      if (!scan.bottleId) continue
+      if (!sources.has(scan.bottleId)) sources.set(scan.bottleId, new Set())
+      sources.get(scan.bottleId)!.add(sourceKey(scan))
+    }
+
+    const flagged = singleBottles.filter(
+      (b) => (sources.get(b.id)?.size ?? 0) >= CLONE_MIN_SOURCES
+    )
+    const open = await openAlertMessages("MASS_CLONING", flagged.map((b) => b.manufacturerId))
+
+    for (const bottle of flagged) {
+      const sourceCount = sources.get(bottle.id)!.size
+      checks.cloning++
+      if (open.some((m) => m.includes(bottle.serialId))) continue
+
+      const severity: AlertSeverity =
+        sourceCount >= CLONE_CRITICAL
+          ? "CRITICAL"
+          : sourceCount >= CLONE_HIGH_CONCERN
+            ? "HIGH_CONCERN"
+            : "SUSPICIOUS"
+
+      await prisma.alertLog.create({
+        data: {
+          type: "MASS_CLONING",
+          severity,
+          manufacturerId: bottle.manufacturerId,
+          batchId: bottle.batchId,
+          message: `Single-mode code ${bottle.serialId} was scanned from ${sourceCount} different devices or connections. Copies of this code are likely in circulation.`,
+          detail: JSON.stringify({
+            bottleId: bottle.id,
+            serialId: bottle.serialId,
+            sourceCount,
+            product: bottle.batch?.product?.name,
+            batchCode: bottle.batch?.batchCode,
+          }),
+          confidenceScore: Math.min(0.6 + (sourceCount / 20) * 0.39, 0.99),
+        },
+      })
+      alertsCreated++
+    }
+  }
+
+  // ── 3. Geographic teleportation detection ─────────────────────────────────
+  // Consecutive scans of the same bottle at impossible speeds. All located
+  // scans from the last 24 hours are read in one query and grouped here.
+
+  const locatedScans = await prisma.scanLog.findMany({
     where: {
       bottleId: { not: null },
       lat: { not: null },
       lng: { not: null },
       scannedAt: { gte: since },
     },
-    having: {
-      bottleId: { _count: { gte: 2 } },
+    orderBy: { scannedAt: "asc" },
+    select: {
+      lat: true,
+      lng: true,
+      scannedAt: true,
+      bottleId: true,
+      region: true,
+      bottle: { select: { serialId: true, manufacturerId: true } },
     },
+    take: MAX_SCANS_PER_RULE,
   })
 
-  for (const item of bottlesWithMultipleLocations) {
-    if (!item.bottleId) continue
+  const locatedByBottle = groupBy(locatedScans, (s) => s.bottleId)
+  const teleports: {
+    bottleId: string
+    serialId: string
+    manufacturerId: string
+    prev: (typeof locatedScans)[number]
+    curr: (typeof locatedScans)[number]
+    distKm: number
+    hoursElapsed: number
+    speedKmh: number
+  }[] = []
 
-    const scans = await prisma.scanLog.findMany({
-      where: {
-        bottleId: item.bottleId,
-        lat: { not: null },
-        lng: { not: null },
-        scannedAt: { gte: since },
-      },
-      orderBy: { scannedAt: "asc" },
-      select: {
-        lat: true,
-        lng: true,
-        scannedAt: true,
-        manufacturerId: true,
-        bottleId: true,
-        region: true,
-      },
-    })
-
+  for (const [bottleId, scans] of locatedByBottle) {
     for (let i = 1; i < scans.length; i++) {
       const prev = scans[i - 1]
       const curr = scans[i]
-
-      if (!prev.lat || !prev.lng || !curr.lat || !curr.lng) continue
+      if (prev.lat == null || prev.lng == null || curr.lat == null || curr.lng == null) continue
+      if (!curr.bottle) continue
 
       const distKm = haversineKm(prev.lat, prev.lng, curr.lat, curr.lng)
       if (distKm < TELEPORT_MIN_DISTANCE_KM) continue
       const hoursElapsed =
-        (curr.scannedAt.getTime() - prev.scannedAt.getTime()) /
-        1000 /
-        3600
-
+        (curr.scannedAt.getTime() - prev.scannedAt.getTime()) / 1000 / 3600
       if (hoursElapsed <= 0) continue
 
       const speedKmh = distKm / hoursElapsed
-
       if (speedKmh > TELEPORT_SPEED_KMH) {
-        checks.teleportation++
-
-        const bottle = await prisma.bottle.findUnique({
-          where: { id: item.bottleId! },
-          select: { serialId: true, manufacturerId: true },
+        teleports.push({
+          bottleId,
+          serialId: curr.bottle.serialId,
+          manufacturerId: curr.bottle.manufacturerId,
+          prev,
+          curr,
+          distKm,
+          hoursElapsed,
+          speedKmh,
         })
-
-        if (!bottle) continue
-
-        const existingAlert = await prisma.alertLog.findFirst({
-          where: {
-            type: "GEOGRAPHIC_TELEPORTATION",
-            manufacturerId: bottle.manufacturerId,
-            resolved: false,
-            message: { contains: bottle.serialId },
-          },
-        })
-
-        if (!existingAlert) {
-          const confidence = Math.min(
-            0.7 + (speedKmh / 2000) * 0.3,
-            0.99
-          )
-
-          await prisma.alertLog.create({
-            data: {
-              type: "GEOGRAPHIC_TELEPORTATION",
-              severity: "CRITICAL",
-              manufacturerId: bottle.manufacturerId,
-              message: `Bottle ${bottle.serialId} scanned ${Math.round(distKm)}km apart in ${hoursElapsed.toFixed(1)} hours, too far to travel in that time`,
-              detail: JSON.stringify({
-                bottleId: item.bottleId,
-                serialId: bottle.serialId,
-                distanceKm: Math.round(distKm),
-                hoursElapsed: hoursElapsed.toFixed(2),
-                speedKmh: Math.round(speedKmh),
-                fromRegion: prev.region,
-                toRegion: curr.region,
-                fromCoords: [prev.lat, prev.lng],
-                toCoords: [curr.lat, curr.lng],
-              }),
-              lat: curr.lat,
-              lng: curr.lng,
-              region: curr.region,
-              confidenceScore: confidence,
-            },
-          })
-          alertsCreated++
-        }
+        break // one alert per bottle per run
       }
     }
   }
 
-  // ── 3. Supply chain drift detection ───────────────────────────────────────
-  // Batches scanned outside their targetRegion beyond DRIFT_RADIUS_KM
+  checks.teleportation = teleports.length
+  const openTeleport = await openAlertMessages(
+    "GEOGRAPHIC_TELEPORTATION",
+    teleports.map((t) => t.manufacturerId)
+  )
 
-  const batchesWithRegion = await prisma.batch.findMany({
+  for (const t of teleports) {
+    if (openTeleport.some((m) => m.includes(t.serialId))) continue
+    await prisma.alertLog.create({
+      data: {
+        type: "GEOGRAPHIC_TELEPORTATION",
+        severity: "CRITICAL",
+        manufacturerId: t.manufacturerId,
+        message: `Bottle ${t.serialId} scanned ${Math.round(t.distKm)}km apart in ${t.hoursElapsed.toFixed(1)} hours, too far to travel in that time`,
+        detail: JSON.stringify({
+          bottleId: t.bottleId,
+          serialId: t.serialId,
+          distanceKm: Math.round(t.distKm),
+          hoursElapsed: t.hoursElapsed.toFixed(2),
+          speedKmh: Math.round(t.speedKmh),
+          fromRegion: t.prev.region,
+          toRegion: t.curr.region,
+          fromCoords: [t.prev.lat, t.prev.lng],
+          toCoords: [t.curr.lat, t.curr.lng],
+        }),
+        lat: t.curr.lat,
+        lng: t.curr.lng,
+        region: t.curr.region,
+        confidenceScore: Math.min(0.7 + (t.speedKmh / 2000) * 0.3, 0.99),
+      },
+    })
+    alertsCreated++
+  }
+
+  // ── 4. Supply chain drift detection ───────────────────────────────────────
+  // Batches scanned beyond DRIFT_RADIUS_KM from their target region. Only
+  // batches with located scans in the last 24 hours are looked at, in one
+  // query, instead of one query for every batch ever made.
+
+  const regionScans = await prisma.scanLog.findMany({
     where: {
-      targetRegion: { not: null },
+      batchId: { not: null },
+      lat: { not: null },
+      lng: { not: null },
+      scannedAt: { gte: since },
+      batch: { targetRegion: { not: null } },
     },
     select: {
-      id: true,
-      batchCode: true,
-      targetRegion: true,
-      manufacturerId: true,
+      batchId: true,
+      lat: true,
+      lng: true,
+      region: true,
+      batch: { select: { batchCode: true, targetRegion: true, manufacturerId: true } },
     },
+    take: MAX_SCANS_PER_RULE,
   })
 
-  for (const batch of batchesWithRegion) {
-    if (!batch.targetRegion) continue
+  const drifts: {
+    batchId: string
+    batchCode: string
+    targetRegion: string
+    manufacturerId: string
+    count: number
+    worst: (typeof regionScans)[number]
+    worstKm: number
+  }[] = []
 
-    const targetCoords = regionCoords(batch.targetRegion)
-    if (!targetCoords) continue
+  for (const [batchId, scans] of groupBy(regionScans, (s) => s.batchId)) {
+    const batch = scans[0]?.batch
+    const target = regionCoords(batch?.targetRegion)
+    if (!batch?.targetRegion || !target) continue
 
-    const driftScans = await prisma.scanLog.findMany({
-      where: {
-        batchId: batch.id,
-        lat: { not: null },
-        lng: { not: null },
-        scannedAt: { gte: since },
-      },
-      select: {
-        lat: true,
-        lng: true,
-        region: true,
-        scannedAt: true,
-      },
-      take: 50,
-    })
-
-    const driftingScans = driftScans.filter((scan) => {
-      if (!scan.lat || !scan.lng) return false
-      const dist = haversineKm(
-        targetCoords.lat,
-        targetCoords.lng,
-        scan.lat,
-        scan.lng
-      )
-      return dist > DRIFT_RADIUS_KM
-    })
-
-    if (driftingScans.length > 0) {
-      checks.drift++
-
-      const existingAlert = await prisma.alertLog.findFirst({
-        where: {
-          type: "SUPPLY_CHAIN_DRIFT",
-          manufacturerId: batch.manufacturerId,
-          resolved: false,
-          detail: { contains: batch.id },
-        },
-      })
-
-      if (!existingAlert) {
-        const worstScan = driftingScans[0]
-        const dist = worstScan.lat && worstScan.lng
-          ? haversineKm(
-              targetCoords.lat,
-              targetCoords.lng,
-              worstScan.lat,
-              worstScan.lng
-            )
-          : 0
-
-        await prisma.alertLog.create({
-          data: {
-            type: "SUPPLY_CHAIN_DRIFT",
-            severity: "SUSPICIOUS",
-            manufacturerId: batch.manufacturerId,
-            message: `Batch ${batch.batchCode} (target: ${batch.targetRegion}) scanned ${Math.round(dist)}km outside expected region`,
-            detail: JSON.stringify({
-              batchId: batch.id,
-              batchCode: batch.batchCode,
-              targetRegion: batch.targetRegion,
-              driftingScanCount: driftingScans.length,
-              maxDriftKm: Math.round(dist),
-              detectedRegion: worstScan.region,
-            }),
-            batchId: batch.id,
-            lat: worstScan.lat,
-            lng: worstScan.lng,
-            region: worstScan.region,
-            confidenceScore: Math.min(
-              0.5 + (driftingScans.length / 10) * 0.4,
-              0.95
-            ),
-          },
-        })
-        alertsCreated++
+    let count = 0
+    let worst = scans[0]
+    let worstKm = 0
+    for (const scan of scans) {
+      if (scan.lat == null || scan.lng == null) continue
+      const km = haversineKm(target.lat, target.lng, scan.lat, scan.lng)
+      if (km <= DRIFT_RADIUS_KM) continue
+      count++
+      if (km > worstKm) {
+        worstKm = km
+        worst = scan
       }
+    }
+    if (count > 0) {
+      drifts.push({
+        batchId,
+        batchCode: batch.batchCode,
+        targetRegion: batch.targetRegion,
+        manufacturerId: batch.manufacturerId,
+        count,
+        worst,
+        worstKm,
+      })
     }
   }
 
-  // ── 4. Bot behavior detection ─────────────────────────────────────────────
-  // Same source scanning many bottles in a very short window. A source is the
-  // anonymous device when the scan has one, and separately the hashed IP with
-  // a much higher threshold.
+  checks.drift = drifts.length
+  const openDrift = await prisma.alertLog.findMany({
+    where: {
+      type: "SUPPLY_CHAIN_DRIFT",
+      resolved: false,
+      batchId: { in: drifts.map((d) => d.batchId) },
+    },
+    select: { batchId: true },
+  })
+  const driftOpen = new Set(openDrift.map((a) => a.batchId))
 
-  const recentScans = await prisma.scanLog.findMany({
+  for (const d of drifts) {
+    if (driftOpen.has(d.batchId)) continue
+    await prisma.alertLog.create({
+      data: {
+        type: "SUPPLY_CHAIN_DRIFT",
+        severity: "SUSPICIOUS",
+        manufacturerId: d.manufacturerId,
+        message: `Batch ${d.batchCode} (target: ${d.targetRegion}) scanned ${Math.round(d.worstKm)}km outside expected region`,
+        detail: JSON.stringify({
+          batchId: d.batchId,
+          batchCode: d.batchCode,
+          targetRegion: d.targetRegion,
+          driftingScanCount: d.count,
+          maxDriftKm: Math.round(d.worstKm),
+          detectedRegion: d.worst.region,
+        }),
+        batchId: d.batchId,
+        lat: d.worst.lat,
+        lng: d.worst.lng,
+        region: d.worst.region,
+        confidenceScore: Math.min(0.5 + (d.count / 10) * 0.4, 0.95),
+      },
+    })
+    alertsCreated++
+  }
+
+  // ── 5. Bot behavior detection ─────────────────────────────────────────────
+  // A source scanning many codes within any 2 minute window of the last 24
+  // hours (the job runs once a day, so looking only at the last 2 minutes
+  // missed almost everything). A source is the anonymous device when the scan
+  // has one, and separately the hashed IP with a much higher threshold.
+
+  const daySourceScans = await prisma.scanLog.findMany({
     where: {
       OR: [{ deviceHash: { not: null } }, { ipHash: { not: null } }],
-      scannedAt: { gte: new Date(Date.now() - BOT_TIME_WINDOW_MS) },
+      scannedAt: { gte: since },
     },
     select: {
       deviceHash: true,
@@ -397,106 +476,101 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
       manufacturerId: true,
     },
     orderBy: { scannedAt: "asc" },
+    take: MAX_SCANS_PER_RULE,
   })
 
-  // Group by source
-  const bySource: Record<string, typeof recentScans> = {}
-  const add = (key: string, scan: (typeof recentScans)[number]) => {
-    if (!bySource[key]) bySource[key] = []
-    bySource[key].push(scan)
+  const bySource = new Map<string, typeof daySourceScans>()
+  const add = (key: string, scan: (typeof daySourceScans)[number]) => {
+    const list = bySource.get(key)
+    if (list) list.push(scan)
+    else bySource.set(key, [scan])
   }
-
-  for (const scan of recentScans) {
+  for (const scan of daySourceScans) {
     if (scan.deviceHash) add(`device:${scan.deviceHash}`, scan)
     if (scan.ipHash) add(`ip:${scan.ipHash}`, scan)
   }
 
-  for (const [key, scans] of Object.entries(bySource)) {
+  const bots: {
+    isIp: boolean
+    sourceHash: string
+    manufacturerId: string
+    scanCount: number
+    uniqueBottles: number
+    windowStart: Date
+  }[] = []
+
+  for (const [key, scans] of bySource) {
     const isIp = key.startsWith("ip:")
-    if (scans.length < (isIp ? BOT_IP_SCAN_COUNT : BOT_SCAN_COUNT)) continue
-    const source = key.slice(key.indexOf(":") + 1)
+    const threshold = isIp ? BOT_IP_SCAN_COUNT : BOT_SCAN_COUNT
+    if (scans.length < threshold) continue
 
-    checks.bot++
-
-    const uniqueBottles = new Set(scans.map((s) => s.bottleId)).size
-    const manufacturerId = scans[0]?.manufacturerId
-
-    if (!manufacturerId) continue
-
-    const existingAlert = await prisma.alertLog.findFirst({
-      where: {
-        type: "BOT_ACTIVITY",
-        manufacturerId,
-        resolved: false,
-        createdAt: {
-          gte: new Date(Date.now() - 60 * 60 * 1000),
-        },
-      },
-    })
-
-    if (!existingAlert) {
-      await prisma.alertLog.create({
-        data: {
-          type: "BOT_ACTIVITY",
-          severity: "HIGH_CONCERN",
-          manufacturerId,
-          message: `${scans.length} scans from one ${isIp ? "IP address" : "device"} in under 2 minutes, which suggests automated scanning`,
-          detail: JSON.stringify({
-            sourceType: isIp ? "ip" : "device",
-            sourceHash: source.slice(0, 12),
-            scanCount: scans.length,
-            uniqueBottles,
-            windowMs: BOT_TIME_WINDOW_MS,
-          }),
-          confidenceScore: Math.min(
-            0.6 + (scans.length / 200) * 0.4,
-            0.98
-          ),
-        },
-      })
-      alertsCreated++
+    // Busiest 2 minute window, with two pointers over the sorted scans.
+    let best = 0
+    let bestStart = 0
+    let lo = 0
+    for (let hi = 0; hi < scans.length; hi++) {
+      while (scans[hi].scannedAt.getTime() - scans[lo].scannedAt.getTime() > BOT_TIME_WINDOW_MS) lo++
+      if (hi - lo + 1 > best) {
+        best = hi - lo + 1
+        bestStart = lo
+      }
     }
+    if (best < threshold) continue
+
+    const windowScans = scans.slice(bestStart, bestStart + best)
+    // The manufacturer whose codes this source scanned most in that window.
+    const perMfr = new Map<string, number>()
+    for (const w of windowScans) perMfr.set(w.manufacturerId, (perMfr.get(w.manufacturerId) ?? 0) + 1)
+    const manufacturerId = [...perMfr.entries()].sort((x, y) => y[1] - x[1])[0][0]
+
+    bots.push({
+      isIp,
+      sourceHash: key.slice(key.indexOf(":") + 1).slice(0, 12),
+      manufacturerId,
+      scanCount: best,
+      uniqueBottles: new Set(windowScans.map((w) => w.bottleId)).size,
+      windowStart: windowScans[0].scannedAt,
+    })
   }
 
-  // ── 5. Fraud rate recomputation ───────────────────────────────────────────
-  // Update fraudRateCached + totalFraudFlags for all active manufacturers
-
-  const manufacturers = await prisma.manufacturer.findMany({
-    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-    select: { id: true },
+  checks.bot = bots.length
+  const openBot = await prisma.alertLog.findMany({
+    where: {
+      type: "BOT_ACTIVITY",
+      resolved: false,
+      createdAt: { gte: since },
+      manufacturerId: { in: bots.map((b) => b.manufacturerId) },
+    },
+    select: { detail: true },
   })
 
-  let manufacturersUpdated = 0
-
-  for (const mfr of manufacturers) {
-    const [totalScans, fraudScans, totalBottles] = await Promise.all([
-      prisma.scanLog.count({
-        where: { manufacturerId: mfr.id },
-      }),
-      prisma.scanLog.count({
-        where: { manufacturerId: mfr.id, fraudFlag: true },
-      }),
-      prisma.bottle.count({
-        where: { manufacturerId: mfr.id },
-      }),
-    ])
-
-    const fraudRate =
-      totalScans > 0 ? (fraudScans / totalScans) * 100 : 0
-
-    await prisma.manufacturer.update({
-      where: { id: mfr.id },
+  for (const b of bots) {
+    // One open alert per source per day
+    if (openBot.some((a) => a.detail?.includes(b.sourceHash))) continue
+    await prisma.alertLog.create({
       data: {
-        totalScans,
-        totalFraudFlags: fraudScans,
-        totalBottlesGenerated: totalBottles,
-        fraudRateCached: fraudRate,
+        type: "BOT_ACTIVITY",
+        severity: "HIGH_CONCERN",
+        manufacturerId: b.manufacturerId,
+        message: `${b.scanCount} scans from one ${b.isIp ? "IP address" : "device"} within 2 minutes, which suggests automated scanning`,
+        detail: JSON.stringify({
+          sourceType: b.isIp ? "ip" : "device",
+          sourceHash: b.sourceHash,
+          scanCount: b.scanCount,
+          uniqueBottles: b.uniqueBottles,
+          windowStart: b.windowStart.toISOString(),
+          windowMs: BOT_TIME_WINDOW_MS,
+        }),
+        confidenceScore: Math.min(0.6 + (b.scanCount / 200) * 0.4, 0.98),
       },
     })
-
-    checks.fraud_rates++
-    manufacturersUpdated++
+    alertsCreated++
   }
+
+  // ── 6. Fraud rate recomputation ───────────────────────────────────────────
+
+  const manufacturersUpdated = await recomputeFraudRates()
+  checks.fraud_rates = manufacturersUpdated
 
   return {
     ran_at: new Date().toISOString(),
@@ -507,56 +581,101 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
   }
 }
 
-// ── Fast pipeline — fraud rates only ─────────────────────────────────────────
-// Runs in under 10 seconds — suitable for Hobby plan manual trigger
-// Full pipeline runs via daily cron
+// ── Fast pipeline: fraud rates only ──────────────────────────────────────────
+// For the manual trigger in the admin portal. The full pipeline runs from the
+// daily cron.
 
 export async function runFastFraudPipeline(): Promise<PipelineResult> {
   const startTime = Date.now()
-  const alertsCreated = 0
-  const checks = {
-    velocity: 0,
-    teleportation: 0,
-    drift: 0,
-    bot: 0,
-    fraud_rates: 0,
-  }
-
-  const manufacturers = await prisma.manufacturer.findMany({
-    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-    select: { id: true },
-  })
-
-  for (const mfr of manufacturers) {
-    const [totalScans, fraudScans, totalBottles] = await Promise.all([
-      prisma.scanLog.count({ where: { manufacturerId: mfr.id } }),
-      prisma.scanLog.count({
-        where: { manufacturerId: mfr.id, fraudFlag: true },
-      }),
-      prisma.bottle.count({ where: { manufacturerId: mfr.id } }),
-    ])
-
-    const fraudRate =
-      totalScans > 0 ? (fraudScans / totalScans) * 100 : 0
-
-    await prisma.manufacturer.update({
-      where: { id: mfr.id },
-      data: {
-        totalScans,
-        totalFraudFlags: fraudScans,
-        totalBottlesGenerated: totalBottles,
-        fraudRateCached: fraudRate,
-      },
-    })
-
-    checks.fraud_rates++
-  }
-
+  const manufacturersUpdated = await recomputeFraudRates()
   return {
     ran_at: new Date().toISOString(),
     duration_ms: Date.now() - startTime,
-    alerts_created: alertsCreated,
-    manufacturers_updated: manufacturers.length,
-    checks,
+    alerts_created: 0,
+    manufacturers_updated: manufacturersUpdated,
+    checks: {
+      velocity: 0,
+      cloning: 0,
+      teleportation: 0,
+      drift: 0,
+      bot: 0,
+      fraud_rates: manufacturersUpdated,
+    },
   }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+// Updates totalScans, totalFraudFlags, totalBottlesGenerated and
+// fraudRateCached for every active manufacturer, with three grouped counts
+// instead of three counts per manufacturer.
+async function recomputeFraudRates(): Promise<number> {
+  const [manufacturers, scans, flags, bottles] = await Promise.all([
+    prisma.manufacturer.findMany({
+      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+      select: { id: true },
+    }),
+    prisma.scanLog.groupBy({ by: ["manufacturerId"], _count: true }),
+    prisma.scanLog.groupBy({ by: ["manufacturerId"], _count: true, where: { fraudFlag: true } }),
+    prisma.bottle.groupBy({ by: ["manufacturerId"], _count: true }),
+  ])
+  if (manufacturers.length === 0) return 0
+
+  const toMap = (rows: { manufacturerId: string; _count: number }[]) =>
+    new Map(rows.map((r) => [r.manufacturerId, r._count]))
+  const scanMap = toMap(scans)
+  const flagMap = toMap(flags)
+  const bottleMap = toMap(bottles)
+
+  await prisma.$transaction(
+    manufacturers.map((m) => {
+      const totalScans = scanMap.get(m.id) ?? 0
+      const fraudScans = flagMap.get(m.id) ?? 0
+      return prisma.manufacturer.update({
+        where: { id: m.id },
+        data: {
+          totalScans,
+          totalFraudFlags: fraudScans,
+          totalBottlesGenerated: bottleMap.get(m.id) ?? 0,
+          fraudRateCached: totalScans > 0 ? (fraudScans / totalScans) * 100 : 0,
+        },
+      })
+    })
+  )
+  return manufacturers.length
+}
+
+// A scan's source: its device, else its hashed IP. A scan with neither (an
+// old record, or no QR_SECRET) counts as its own source, so it is never
+// merged with another scan.
+function sourceKey(scan: { id: string; deviceHash: string | null; ipHash: string | null }): string {
+  if (scan.deviceHash) return `device:${scan.deviceHash}`
+  if (scan.ipHash) return `ip:${scan.ipHash}`
+  return `scan:${scan.id}`
+}
+
+function groupBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]> {
+  const out = new Map<string, T[]>()
+  for (const row of rows) {
+    const k = key(row)
+    if (!k) continue
+    const list = out.get(k)
+    if (list) list.push(row)
+    else out.set(k, [row])
+  }
+  return out
+}
+
+// Messages of the open alerts of one type for these manufacturers, read once
+// so each candidate does not need its own query.
+async function openAlertMessages(
+  type: "REPEAT_SCAN_ABUSE" | "MASS_CLONING" | "GEOGRAPHIC_TELEPORTATION",
+  manufacturerIds: string[]
+): Promise<string[]> {
+  if (manufacturerIds.length === 0) return []
+  const rows = await prisma.alertLog.findMany({
+    where: { type, resolved: false, manufacturerId: { in: [...new Set(manufacturerIds)] } },
+    select: { message: true },
+  })
+  return rows.map((r) => r.message)
 }

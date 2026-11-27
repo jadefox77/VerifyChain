@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@prisma/client";
 import type { Session } from "next-auth";
+import { getCurrentUser } from "@/lib/current-user";
 
 // ── Role Sets ────────────────────────────────────────────────────────────────
 
@@ -36,85 +37,76 @@ function hasRole(role: UserRole, allowed: UserRole[]): boolean {
   return allowed.includes(role);
 }
 
+// ── Fresh session ────────────────────────────────────────────────────────────
+// The session's role comes from the login token, which can be hours old. Every
+// check below replaces it with the role in the database, so a role change or
+// removal applies on the next request instead of when the token expires.
+
+type FreshSession =
+  | { kind: "ok"; session: AdminSession; mustResetPassword: boolean }
+  | { kind: "signed-out" };
+
+async function freshSession(): Promise<FreshSession> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!session?.user || !userId) return { kind: "signed-out" };
+
+  const user = await getCurrentUser(userId);
+  // The account was deleted after this token was issued.
+  if (!user) return { kind: "signed-out" };
+
+  session.user.role = user.role;
+  session.user.mustResetPassword = user.mustResetPassword;
+  return {
+    kind: "ok",
+    session: session as AdminSession,
+    mustResetPassword: user.mustResetPassword,
+  };
+}
+
 // ── getAdminSession ───────────────────────────────────────────────────────────
 // Returns the session if the user has any admin role.
-// Returns null if unauthenticated or wrong role.
-// Use in API routes.
+// Returns null if unauthenticated, wrong role, or still on a temporary
+// password. Use in API routes.
 
 export async function getAdminSession(): Promise<AdminSession | null> {
-  const session = await auth();
-  if (!session?.user?.role) return null;
-  if (!hasRole(session.user.role as UserRole, ADMIN_ROLES)) return null;
-  return session as AdminSession;
+  const fresh = await freshSession();
+  if (fresh.kind !== "ok") return null;
+  if (fresh.mustResetPassword) return null;
+  if (!hasRole(fresh.session.user.role, ADMIN_ROLES)) return null;
+  return fresh.session;
 }
 
-// ── requireAdmin ─────────────────────────────────────────────────────────────
-// Use in Server Components that any admin role can access.
-// Redirects to /unauthorized if the user doesn't qualify.
+// ── requireRole ──────────────────────────────────────────────────────────────
+// Shared by the require* helpers below, for Server Components and server
+// actions. Redirects to /login, /auth/reset-password or /unauthorized.
 
+async function requireRole(allowed: UserRole[]): Promise<AdminSession> {
+  const fresh = await freshSession();
+  if (fresh.kind !== "ok") redirect("/login");
+  if (fresh.mustResetPassword) redirect("/auth/reset-password");
+  if (!hasRole(fresh.session.user.role, allowed)) redirect("/unauthorized");
+  return fresh.session;
+}
+
+// Any admin role.
 export async function requireAdmin(): Promise<AdminSession> {
-  const session = await auth();
-
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  if (!hasRole(session.user.role as UserRole, ADMIN_ROLES)) {
-    redirect("/unauthorized");
-  }
-
-  return session as AdminSession;
+  return requireRole(ADMIN_ROLES);
 }
 
-// ── requireSuperAdmin ─────────────────────────────────────────────────────────
-// Use in Server Components that only SUPER_ADMIN can access (e.g., /admin/users).
-
+// Only SUPER_ADMIN (e.g., /admin/users).
 export async function requireSuperAdmin(): Promise<AdminSession> {
-  const session = await auth();
-
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  if (!hasRole(session.user.role as UserRole, SUPER_ADMIN_ONLY)) {
-    redirect("/unauthorized");
-  }
-
-  return session as AdminSession;
+  return requireRole(SUPER_ADMIN_ONLY);
 }
 
-// ── requireFraudAnalyst ───────────────────────────────────────────────────────
-// Use in Server Components for fraud intelligence pages.
-
+// Fraud intelligence pages.
 export async function requireFraudAccess(): Promise<AdminSession> {
-  const session = await auth();
-
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  if (!hasRole(session.user.role as UserRole, FRAUD_ROLES)) {
-    redirect("/unauthorized");
-  }
-
-  return session as AdminSession;
+  return requireRole(FRAUD_ROLES);
 }
 
-// ── requireRegulatoryAccess ───────────────────────────────────────────────────
-// Use in Server Components for the regulatory view.
-
+// The regulatory view.
 export async function requireRegulatoryAccess(): Promise<AdminSession> {
-  const session = await auth();
-
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  if (!hasRole(session.user.role as UserRole, REGULATORY_ROLES)) {
-    redirect("/unauthorized");
-  }
-
-  return session as AdminSession;
+  return requireRole(REGULATORY_ROLES);
 }
 
 // ── Permission Predicates ─────────────────────────────────────────────────────

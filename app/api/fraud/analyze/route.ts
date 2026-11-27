@@ -2,7 +2,9 @@ import { runFraudPipeline, runFastFraudPipeline } from "@/lib/fraud-pipeline"
 import { getAdminSession } from "@/lib/admin-auth"
 import { NextRequest } from "next/server"
 
-export const maxDuration = 10
+// The daily job reads a full day of scans with a few grouped queries. 60
+// seconds leaves room as data grows.
+export const maxDuration = 60
 
 export async function POST() {
   const session = await getAdminSession()

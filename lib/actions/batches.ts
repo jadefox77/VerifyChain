@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireManufacturerUser } from "@/lib/current-user"
 import {
   generateSerialId,
   generateTopCapCode,
@@ -15,6 +16,7 @@ import { getMonthlyUsage } from "@/lib/plans"
 export async function generateBatch(formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
+  await requireManufacturerUser(session.user.id)
 
   const manufacturer = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },
@@ -39,7 +41,8 @@ export async function generateBatch(formData: FormData) {
 
   // Soft plan limit: batches are allowed while this month's usage is under the
   // allowance. Once it is reached, new batches wait until the allowance resets
-  // or the plan changes.
+  // or the plan changes. Checked here for a quick answer, and again inside the
+  // transaction below, where it cannot race another batch.
   const usage = await getMonthlyUsage(manufacturer.id, manufacturer.subscriptionPlan)
   if (usage.state === "over") redirect("/dashboard/batches?error=limit")
 
@@ -55,6 +58,13 @@ export async function generateBatch(formData: FormData) {
   // in app/dashboard/batches/page.tsx).
   const batch = await prisma.$transaction(
     async (tx) => {
+      // One batch at a time per manufacturer. Two batches submitted together
+      // would otherwise both pass the usage check. The lock is released when
+      // the transaction ends, and other manufacturers are not affected.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"batch:" + manufacturer.id}))`
+      const current = await getMonthlyUsage(manufacturer.id, manufacturer.subscriptionPlan, tx)
+      if (current.state === "over") return null
+
       const batch = await tx.batch.create({
         data: {
           manufacturerId: manufacturer.id,
@@ -128,6 +138,9 @@ export async function generateBatch(formData: FormData) {
     },
     { maxWait: 10_000, timeout: 50_000 }
   )
+
+  // Another batch used up the allowance while this one waited.
+  if (!batch) redirect("/dashboard/batches?error=limit")
 
   redirect(`/dashboard/batches/${batch.id}`)
 }

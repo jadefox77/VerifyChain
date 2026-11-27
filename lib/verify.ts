@@ -52,9 +52,13 @@ export async function verifyBottle(
           product: true,
         },
       },
+      // Only the earliest label scan is needed (for "first verified"). Loading
+      // them all would get slower as a popular or copied code collects scans.
       scanLogs: {
         where: { scanLayer: "BOTTLE" },
         orderBy: { scannedAt: "asc" },
+        take: 1,
+        select: { scannedAt: true },
       },
     },
   })
@@ -76,6 +80,13 @@ export async function verifyBottle(
   }
 
   const authMode = bottle.batch.product?.authMode ?? "PAIRED"
+
+  // When the product was first verified. updatedAt is not used because it
+  // moves on any later status change, such as being flagged. For a paired
+  // bottle the check finishes when the cap is opened; otherwise it is the
+  // first label scan.
+  const firstVerifiedAt =
+    bottle.cap?.openedAt ?? bottle.scanLogs[0]?.scannedAt ?? bottle.updatedAt
 
   // Log the bottle scan
   await prisma.scanLog.create({
@@ -110,7 +121,7 @@ export async function verifyBottle(
         status: "ALREADY_VERIFIED",
         message:
           "This code has already been used to verify a product. If you have just opened this pack, it may not be genuine.",
-        firstScan: bottle.updatedAt,
+        firstScan: firstVerifiedAt,
         authMode: "SINGLE",
       }
     }
@@ -182,7 +193,7 @@ export async function verifyBottle(
       status: "ALREADY_VERIFIED",
       message:
         "This bottle has already been opened and checked. If you bought it sealed, it may not be genuine.",
-      firstScan: bottle.updatedAt,
+      firstScan: firstVerifiedAt,
       authMode: "PAIRED",
     }
   }

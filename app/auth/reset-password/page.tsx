@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import bcrypt from "bcryptjs"
 import { auth, unstable_update } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getCurrentUser } from "@/lib/current-user"
 import { homePathFor } from "@/lib/home-path"
 import { handleSignOut } from "@/lib/actions/auth"
 import { AuthCard, AuthShell, Notice } from "@/components/ui/auth-shell"
@@ -26,8 +27,11 @@ export default async function ResetPasswordPage({
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  // Only accounts with a temporary password are sent here.
-  if (!session.user.mustResetPassword) redirect("/")
+  // Only accounts with a temporary password are sent here. The flag is read
+  // from the database, since the login token can be out of date.
+  const user = await getCurrentUser(session.user.id)
+  if (!user) redirect("/login")
+  if (!user.mustResetPassword) redirect(homePathFor(user))
 
   const { error } = await searchParams
   const errorMessage = error ? ERRORS[error] ?? "Please check your password and try again." : null
@@ -125,5 +129,6 @@ async function handlePasswordReset(formData: FormData) {
   // Refresh the session token so it no longer carries mustResetPassword.
   await unstable_update({})
 
-  redirect(homePathFor({ role: session.user.role }))
+  const user = await getCurrentUser(session.user.id)
+  redirect(homePathFor({ role: user?.role ?? session.user.role }))
 }

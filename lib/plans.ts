@@ -83,9 +83,14 @@ export function describeUsage(plan: SubscriptionPlan, used: number, now = new Da
 }
 
 // Units serialised this month count towards the allowance.
-export async function getMonthlyUsage(manufacturerId: string, plan: SubscriptionPlan): Promise<MonthlyUsage> {
+// Pass a transaction client as db to count inside that transaction.
+export async function getMonthlyUsage(
+  manufacturerId: string,
+  plan: SubscriptionPlan,
+  db: Pick<typeof prisma, "bottle"> = prisma
+): Promise<MonthlyUsage> {
   const { start } = monthWindow()
-  const used = await prisma.bottle.count({
+  const used = await db.bottle.count({
     where: { manufacturerId, createdAt: { gte: start } },
   })
   return describeUsage(plan, used)

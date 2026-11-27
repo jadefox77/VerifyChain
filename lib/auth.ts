@@ -76,6 +76,7 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
       password: true,
       mustResetPassword: true,
       manufacturer: { select: { id: true } },
+      teamManufacturerId: true,
     },
   })
 
@@ -100,7 +101,7 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
     image: user.image,
     role: user.role,
     mustResetPassword: user.mustResetPassword,
-    manufacturerId: user.manufacturer?.id ?? null,
+    manufacturerId: user.manufacturer?.id ?? user.teamManufacturerId ?? null,
   }
 },
     }),
@@ -153,13 +154,14 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
             role: true,
             mustResetPassword: true,
             manufacturer: { select: { id: true } },
+      teamManufacturerId: true,
           },
         })
         if (dbUser) {
           token.id = dbUser.id
           token.role = dbUser.role
           token.mustResetPassword = dbUser.mustResetPassword
-          token.manufacturerId = dbUser.manufacturer?.id ?? null
+          token.manufacturerId = dbUser.manufacturer?.id ?? dbUser.teamManufacturerId ?? null
         }
       }
 
@@ -180,12 +182,13 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
             role: true,
             mustResetPassword: true,
             manufacturer: { select: { id: true } },
+      teamManufacturerId: true,
           },
         })
         if (dbUser) {
           token.role = dbUser.role
           token.mustResetPassword = dbUser.mustResetPassword
-          token.manufacturerId = dbUser.manufacturer?.id ?? null
+          token.manufacturerId = dbUser.manufacturer?.id ?? dbUser.teamManufacturerId ?? null
         }
       }
 

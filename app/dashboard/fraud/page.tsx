@@ -1,6 +1,5 @@
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { redirect } from "next/navigation"
+import { requireWorkspace } from "@/lib/workspace"
 import type { Metadata } from "next"
 import { MapPin, ShieldCheck } from "lucide-react"
 import { formatSerialId } from "@/lib/serial-format"
@@ -15,13 +14,7 @@ import { formatDate } from "@/lib/format"
 export const metadata: Metadata = { title: "Fraud alerts" }
 
 export default async function FraudPage() {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) redirect("/onboarding")
+  const { manufacturer } = await requireWorkspace("viewFraud")
 
   const [fraudLogs, fraudLogCount, flaggedBottleCount, driftLogs, scansByRegion] =
     await Promise.all([

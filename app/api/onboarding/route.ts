@@ -11,8 +11,18 @@ export async function POST(req: NextRequest) {
   const existing = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },
   })
+  const member = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { teamManufacturerId: true, role: true },
+  })
 
-  if (existing) {
+  // A team member of another company cannot register a company of their own
+  // with the same account, and neither can a team member who was removed
+  // (their role is still factory operator or distributor manager).
+  if (member && member.role !== "MANUFACTURER_ADMIN") {
+    return Response.json({ error: "This account cannot register a company" }, { status: 403 })
+  }
+  if (existing || member?.teamManufacturerId) {
     return Response.json(
       { error: "Manufacturer already exists" },
       { status: 400 }

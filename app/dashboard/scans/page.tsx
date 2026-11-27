@@ -1,9 +1,8 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ScanLine } from "lucide-react"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireWorkspace } from "@/lib/workspace"
 import { PageHeader } from "@/components/ui/page-header"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -65,13 +64,7 @@ export default async function ScansPage({
 }: {
   searchParams: Promise<{ filter?: string; layer?: string }>
 }) {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) redirect("/onboarding")
+  const { manufacturer } = await requireWorkspace("viewScans")
 
   const params = await searchParams
   const filter = RESULT_TABS.some((t) => t.key === params.filter) ? params.filter! : "ALL"

@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
-import { redirect } from "next/navigation"
 import { Boxes, CheckCircle2, Package, ScanLine, TriangleAlert } from "lucide-react"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireWorkspace } from "@/lib/workspace"
 import { PageHeader } from "@/components/ui/page-header"
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
@@ -24,20 +23,7 @@ const STATUS_TONE: Record<string, BadgeTone> = {
 }
 
 export default async function DashboardBillingPage() {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-    select: {
-      id: true,
-      companyName: true,
-      subscriptionPlan: true,
-      subscriptionStatus: true,
-      createdAt: true,
-    },
-  })
-  if (!manufacturer) redirect("/onboarding")
+  const { manufacturer } = await requireWorkspace("viewBilling")
 
   const [usage, unitsAllTime, totalScans, totalBatches, recentBatches] = await Promise.all([
     getMonthlyUsage(manufacturer.id, manufacturer.subscriptionPlan),

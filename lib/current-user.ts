@@ -1,5 +1,4 @@
 import { cache } from "react"
-import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import type { UserRole } from "@prisma/client"
 
@@ -22,20 +21,3 @@ export const getCurrentUser = cache(
     })
   }
 )
-
-const MANUFACTURER_ROLES: UserRole[] = [
-  "MANUFACTURER_ADMIN",
-  "FACTORY_OPERATOR",
-  "DISTRIBUTOR_MANAGER",
-]
-
-// For dashboard server actions, which do not pass through the dashboard
-// layout. Redirects unless the user, as stored now, has a manufacturer role
-// and no pending password reset.
-export async function requireManufacturerUser(userId: string): Promise<CurrentUser> {
-  const user = await getCurrentUser(userId)
-  if (!user) redirect("/login")
-  if (user.mustResetPassword) redirect("/auth/reset-password")
-  if (!MANUFACTURER_ROLES.includes(user.role)) redirect("/unauthorized")
-  return user
-}

@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { Boxes, ChevronRight } from "lucide-react"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireWorkspace } from "@/lib/workspace"
+import { can } from "@/lib/permissions"
 import { BatchForm } from "@/components/dashboard/batch-form"
 import { PageHeader } from "@/components/ui/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -28,13 +28,8 @@ export default async function BatchesPage({
 }: {
   searchParams: Promise<{ error?: string }>
 }) {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) redirect("/onboarding")
+  const { manufacturer, role } = await requireWorkspace("viewBatches")
+  const canCreate = can(role, "createBatches")
 
   const { error } = await searchParams
 
@@ -65,9 +60,10 @@ export default async function BatchesPage({
       {error === "limit" && usage.state !== "over" && (
         <Notice tone="error">That batch could not be generated because this month&apos;s allowance was used up.</Notice>
       )}
-      <UsageNotice usage={usage} />
+      <UsageNotice usage={usage} showPlanLink={can(role, "viewBilling")} />
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_1fr]">
+      <div className={`grid items-start gap-6 ${canCreate ? "lg:grid-cols-[minmax(0,26rem)_1fr]" : ""}`}>
+        {canCreate && (
         <section className={card} aria-labelledby="new-batch">
           <div className={cardHeader}>
             <h2 id="new-batch" className={cardTitle}>
@@ -95,6 +91,7 @@ export default async function BatchesPage({
             )}
           </div>
         </section>
+        )}
 
         <section className={card} aria-labelledby="batch-list">
           <div className={cardHeader}>

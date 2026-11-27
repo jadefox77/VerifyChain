@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
-import { auth, signOut, ADMIN_ROLES, MANUFACTURER_ROLES } from "@/lib/auth"
-import { getCurrentUser } from "@/lib/current-user"
-import { prisma } from "@/lib/prisma"
+import { auth, signOut } from "@/lib/auth"
+import { requireWorkspace } from "@/lib/workspace"
 import { Sidebar } from "@/components/sidebar"
 
 export const metadata: Metadata = {
@@ -16,25 +15,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  // Read the role from the database, not the login token, which can be up to
-  // 7 days old. A user whose role was changed or removed loses access now.
-  const user = await getCurrentUser(session.user.id)
-  if (!user) redirect("/login")
-  if (user.mustResetPassword) redirect("/auth/reset-password")
-  if (!MANUFACTURER_ROLES.includes(user.role)) {
-    redirect(ADMIN_ROLES.includes(user.role) ? "/admin" : "/unauthorized")
-  }
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-    select: { onboardingStatus: true, companyName: true },
-  })
-
-  // No manufacturer record yet
-  if (!manufacturer) redirect("/onboarding")
-
-  // Registered but not yet approved
-  if (manufacturer.onboardingStatus !== "ACTIVE_PRODUCTION") redirect("/onboarding/pending")
+  // Owner or team member, with role and company read from the database (not
+  // the login token, which can be up to 7 days old). Redirects anyone who
+  // cannot use the dashboard.
+  const { manufacturer, role } = await requireWorkspace()
 
   async function handleSignOut() {
     "use server"
@@ -46,6 +30,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Sidebar
         email={session.user.email ?? ""}
         companyName={manufacturer.companyName}
+        role={role}
         signOutAction={handleSignOut}
       />
       <main id="main" className="min-w-0 flex-1 px-4 pb-12 pt-20 sm:px-6 lg:px-10 lg:pt-10">

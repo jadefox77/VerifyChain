@@ -1,8 +1,7 @@
 "use server"
 
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { requireManufacturerUser } from "@/lib/current-user"
+import { requireWorkspace } from "@/lib/workspace"
 import {
   generateSerialId,
   generateTopCapCode,
@@ -14,15 +13,7 @@ import { makeManufacturerCode } from "@/lib/batch-naming"
 import { getMonthlyUsage } from "@/lib/plans"
 
 export async function generateBatch(formData: FormData) {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-  await requireManufacturerUser(session.user.id)
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) redirect("/onboarding")
-  if (manufacturer.onboardingStatus !== "ACTIVE_PRODUCTION") redirect("/onboarding/pending")
+  const { manufacturer } = await requireWorkspace("createBatches")
 
   const productId = formData.get("productId") as string
   const quantity = parseInt(formData.get("quantity") as string, 10)

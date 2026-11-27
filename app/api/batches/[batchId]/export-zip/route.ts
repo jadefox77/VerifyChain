@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth"
+import { getWorkspace } from "@/lib/workspace"
 import { prisma } from "@/lib/prisma"
 import { NextRequest } from "next/server"
 import QRCode from "qrcode"
@@ -10,19 +10,15 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ batchId: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  // Owners and team members who may download QR files (admins and factory
+  // operators). Role and company are read from the database.
+  const workspace = await getWorkspace("exportBatches")
+  if (!workspace) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
+  const { manufacturer } = workspace
 
   const { batchId } = await params
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) {
-    return Response.json({ error: "Not found" }, { status: 404 })
-  }
 
   const batch = await prisma.batch.findFirst({
     where: { id: batchId, manufacturerId: manufacturer.id },

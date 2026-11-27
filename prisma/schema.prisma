@@ -113,8 +113,13 @@ model User {
   // Relations
   accounts     Account[]
   sessions     Session[]
-  manufacturer Manufacturer?
+  manufacturer Manufacturer? @relation("ManufacturerOwner")
   auditLogs    AuditLog[]
+
+  // Team member of a manufacturer they do not own (factory operator,
+  // distributor manager, or another admin). Null for owners and staff.
+  teamManufacturerId String?
+  teamManufacturer   Manufacturer? @relation("ManufacturerTeam", fields: [teamManufacturerId], references: [id], onDelete: SetNull)
 
   password          String?
   mustResetPassword Boolean   @default(false)
@@ -125,6 +130,7 @@ model User {
 
   @@index([email])
   @@index([role])
+  @@index([teamManufacturerId])
 }
 
 // =============================================================================
@@ -134,7 +140,10 @@ model User {
 model Manufacturer {
   id     String @id @default(cuid())
   userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation("ManufacturerOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Users who work for this manufacturer but do not own the account
+  teamMembers User[] @relation("ManufacturerTeam")
 
   // ── Company Information ───────────────────────────────────────────────────
   companyName        String

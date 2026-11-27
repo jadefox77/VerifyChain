@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/prisma"
 import type { AlertSeverity } from "@prisma/client"
 import { DRIFT_RADIUS_KM, haversineKm, regionCoords } from "@/lib/regions"
+import { busiestWindow, isImpossibleTravel, sourceKey } from "@/lib/fraud-math"
 
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
@@ -300,13 +301,15 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
       if (!curr.bottle) continue
 
       const distKm = haversineKm(prev.lat, prev.lng, curr.lat, curr.lng)
-      if (distKm < TELEPORT_MIN_DISTANCE_KM) continue
       const hoursElapsed =
         (curr.scannedAt.getTime() - prev.scannedAt.getTime()) / 1000 / 3600
-      if (hoursElapsed <= 0) continue
-
-      const speedKmh = distKm / hoursElapsed
-      if (speedKmh > TELEPORT_SPEED_KMH) {
+      if (
+        isImpossibleTravel(distKm, hoursElapsed, {
+          minDistanceKm: TELEPORT_MIN_DISTANCE_KM,
+          maxSpeedKmh: TELEPORT_SPEED_KMH,
+        })
+      ) {
+        const speedKmh = distKm / hoursElapsed
         teleports.push({
           bottleId,
           serialId: curr.bottle.serialId,
@@ -504,17 +507,11 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
     const threshold = isIp ? BOT_IP_SCAN_COUNT : BOT_SCAN_COUNT
     if (scans.length < threshold) continue
 
-    // Busiest 2 minute window, with two pointers over the sorted scans.
-    let best = 0
-    let bestStart = 0
-    let lo = 0
-    for (let hi = 0; hi < scans.length; hi++) {
-      while (scans[hi].scannedAt.getTime() - scans[lo].scannedAt.getTime() > BOT_TIME_WINDOW_MS) lo++
-      if (hi - lo + 1 > best) {
-        best = hi - lo + 1
-        bestStart = lo
-      }
-    }
+    // Busiest 2 minute window over the sorted scans.
+    const { count: best, start: bestStart } = busiestWindow(
+      scans.map((w) => w.scannedAt.getTime()),
+      BOT_TIME_WINDOW_MS
+    )
     if (best < threshold) continue
 
     const windowScans = scans.slice(bestStart, bestStart + best)
@@ -643,15 +640,6 @@ async function recomputeFraudRates(): Promise<number> {
     })
   )
   return manufacturers.length
-}
-
-// A scan's source: its device, else its hashed IP. A scan with neither (an
-// old record, or no QR_SECRET) counts as its own source, so it is never
-// merged with another scan.
-function sourceKey(scan: { id: string; deviceHash: string | null; ipHash: string | null }): string {
-  if (scan.deviceHash) return `device:${scan.deviceHash}`
-  if (scan.ipHash) return `ip:${scan.ipHash}`
-  return `scan:${scan.id}`
 }
 
 function groupBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]> {

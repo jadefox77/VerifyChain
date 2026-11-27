@@ -45,10 +45,15 @@ export default async function OnboardingPendingPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-    select: { companyName: true, onboardingStatus: true, createdAt: true },
+  // The company this user owns, or the one they are a team member of.
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      manufacturer: { select: { companyName: true, onboardingStatus: true, createdAt: true } },
+      teamManufacturer: { select: { companyName: true, onboardingStatus: true, createdAt: true } },
+    },
   })
+  const manufacturer = user?.manufacturer ?? user?.teamManufacturer ?? null
 
   if (!manufacturer) redirect("/onboarding")
   if (manufacturer.onboardingStatus === "ACTIVE_PRODUCTION") redirect("/dashboard")

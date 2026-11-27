@@ -61,10 +61,11 @@ export function buildCapVerifyUrl(
 }
 
 export function verifySignature(serialId: string, sig: string): boolean {
-  const expected = signSerial(serialId)
-  if (sig.length !== expected.length) return false
-  return crypto.timingSafeEqual(
-    Buffer.from(sig),
-    Buffer.from(expected)
-  )
+  const expected = Buffer.from(signSerial(serialId))
+  const given = Buffer.from(sig)
+  // Compare byte lengths, not string lengths: a signature with non-ASCII
+  // characters can have the right length in characters but not in bytes,
+  // and timingSafeEqual throws on buffers of different sizes.
+  if (given.length !== expected.length) return false
+  return crypto.timingSafeEqual(given, expected)
 }

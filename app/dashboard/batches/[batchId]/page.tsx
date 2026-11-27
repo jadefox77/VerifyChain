@@ -2,8 +2,9 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ArrowLeft, Download, FileSpreadsheet } from "lucide-react"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireWorkspace } from "@/lib/workspace"
+import { can } from "@/lib/permissions"
 import { formatSerialId } from "@/lib/serial-format"
 import { PageHeader } from "@/components/ui/page-header"
 import { StatCard } from "@/components/ui/stat-card"
@@ -22,13 +23,7 @@ const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
 
 export default async function BatchDetailPage({ params }: { params: Promise<{ batchId: string }> }) {
   const { batchId } = await params
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) redirect("/onboarding")
+  const { manufacturer, role } = await requireWorkspace("viewBatches")
 
   const batch = await prisma.batch.findFirst({
     where: { id: batchId, manufacturerId: manufacturer.id },
@@ -75,6 +70,7 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ ba
           </>
         }
         actions={
+          can(role, "exportBatches") && (
           <>
             <a href={`/api/batches/${batch.id}/export`} className={buttonSecondary}>
               <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
@@ -85,6 +81,7 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ ba
               QR codes (ZIP)
             </a>
           </>
+          )
         }
       />
 

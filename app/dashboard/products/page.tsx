@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { Package } from "lucide-react"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { requireManufacturerUser } from "@/lib/current-user"
+import { requireWorkspace } from "@/lib/workspace"
+import { can } from "@/lib/permissions"
 import { PageHeader } from "@/components/ui/page-header"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -28,13 +28,8 @@ const CATEGORIES = [
 const categoryLabel = (v: string | null) => CATEGORIES.find((c) => c.value === v)?.label ?? v ?? "Uncategorised"
 
 export default async function ProductsPage() {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) redirect("/onboarding")
+  const { manufacturer, role } = await requireWorkspace("viewProducts")
+  const canManage = can(role, "manageProducts")
 
   const products = await prisma.product.findMany({
     where: { manufacturerId: manufacturer.id },
@@ -49,7 +44,8 @@ export default async function ProductsPage() {
         description="Each batch of codes belongs to a product. Choose how a product is verified when you add it."
       />
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_1fr]">
+      <div className={`grid items-start gap-6 ${canManage ? "lg:grid-cols-[minmax(0,26rem)_1fr]" : ""}`}>
+        {canManage && (
         <section className={card} aria-labelledby="add-product">
           <div className={cardHeader}>
             <h2 id="add-product" className={cardTitle}>
@@ -125,6 +121,7 @@ export default async function ProductsPage() {
             </SubmitButton>
           </form>
         </section>
+        )}
 
         <section className={card} aria-labelledby="product-list">
           <div className={cardHeader}>
@@ -172,15 +169,7 @@ export default async function ProductsPage() {
 async function createProduct(formData: FormData) {
   "use server"
 
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-  await requireManufacturerUser(session.user.id)
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) redirect("/onboarding")
-  if (manufacturer.onboardingStatus !== "ACTIVE_PRODUCTION") redirect("/onboarding/pending")
+  const { manufacturer } = await requireWorkspace("manageProducts")
 
   const name = String(formData.get("name") ?? "").trim()
   const category = String(formData.get("category") ?? "")

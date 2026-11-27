@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import {
   ArrowRight,
   Boxes,
@@ -10,8 +9,9 @@ import {
   ShieldAlert,
   TriangleAlert,
 } from "lucide-react"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireWorkspace } from "@/lib/workspace"
+import { can } from "@/lib/permissions"
 import { PageHeader } from "@/components/ui/page-header"
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
@@ -22,13 +22,7 @@ import { getMonthlyUsage } from "@/lib/plans"
 import { UsageNotice } from "@/components/dashboard/usage-notice"
 
 export default async function DashboardPage() {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-  })
-  if (!manufacturer) redirect("/onboarding")
+  const { manufacturer, role } = await requireWorkspace()
 
   const m = manufacturer.id
   const [
@@ -80,16 +74,18 @@ export default async function DashboardPage() {
         title="Overview"
         description={`${manufacturer.companyName} · ${humanize(manufacturer.subscriptionPlan)} plan`}
         actions={
+          can(role, "createBatches") && (
           <Link href="/dashboard/batches" className={buttonPrimary}>
             <Boxes className="h-4 w-4" aria-hidden="true" />
             New batch
           </Link>
+          )
         }
       />
 
-      <UsageNotice usage={usage} />
+      <UsageNotice usage={usage} showPlanLink={can(role, "viewBilling")} />
 
-      {unresolvedAlerts > 0 && (
+      {unresolvedAlerts > 0 && can(role, "viewFraud") && (
         <Link
           href="/dashboard/fraud"
           className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 transition-colors hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:hover:bg-red-500/15"

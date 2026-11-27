@@ -14,11 +14,13 @@ export default async function OnboardingPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  const existing = await prisma.manufacturer.findUnique({
-    where: { userId: session.user.id },
-    select: { id: true },
+  // Owners who already registered, and team members of another company,
+  // do not register a company here.
+  const existing = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { teamManufacturerId: true, manufacturer: { select: { id: true } } },
   })
-  if (existing) redirect("/dashboard")
+  if (existing?.manufacturer || existing?.teamManufacturerId) redirect("/dashboard")
 
   return (
     <AuthShell

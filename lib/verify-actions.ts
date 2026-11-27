@@ -13,44 +13,17 @@ import {
 } from "@/lib/ratelimit"
 import { getRequestMeta } from "@/lib/request-meta"
 import { getOrCreateDevice } from "@/lib/device"
+import {
+  BOTTLE_TTL_MS,
+  addRecentBottle,
+  readRecentBottles,
+  type RecentBottle,
+} from "@/lib/recent-bottles"
 
 // The bottles the consumer scanned recently are remembered for 10 minutes
 // each, so a cap scan can be checked against any of them. Someone who scans a
 // whole crate and then opens the first bottle is still matched correctly.
 const BOTTLE_COOKIE = "vc_bottle"
-const BOTTLE_TTL_MS = 10 * 60 * 1000
-const MAX_RECENT_BOTTLES = 24
-
-type RecentBottle = { s: string; t: number }
-
-function readRecentBottles(raw: string | undefined): RecentBottle[] {
-  if (!raw) return []
-  const now = Date.now()
-  if (!raw.startsWith("[")) {
-    // Cookie from before this change: a single serial id with no time.
-    // Treat it as just scanned so a check in progress is not lost.
-    return /^[A-Za-z0-9-]{1,20}$/.test(raw) ? [{ s: raw, t: now }] : []
-  }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return []
-  }
-  if (!Array.isArray(parsed)) return []
-  return parsed
-    .filter(
-      (b): b is RecentBottle =>
-        typeof b === "object" &&
-        b !== null &&
-        typeof (b as RecentBottle).s === "string" &&
-        (b as RecentBottle).s.length <= 20 &&
-        typeof (b as RecentBottle).t === "number" &&
-        now - (b as RecentBottle).t < BOTTLE_TTL_MS
-    )
-    .slice(0, MAX_RECENT_BOTTLES)
-}
-
 async function writeRecentBottles(list: RecentBottle[]) {
   const jar = await cookies()
   if (list.length === 0) {
@@ -144,14 +117,9 @@ export async function verifyBottleAction(
   })
 
   if (result.status === "PROMPT_CAP") {
-    // Newest first, without duplicates, so a rescan refreshes its time.
     const jar = await cookies()
-    const recent = readRecentBottles(jar.get(BOTTLE_COOKIE)?.value).filter(
-      (b) => b.s !== id.data
-    )
-    await writeRecentBottles(
-      [{ s: id.data, t: Date.now() }, ...recent].slice(0, MAX_RECENT_BOTTLES)
-    )
+    const recent = readRecentBottles(jar.get(BOTTLE_COOKIE)?.value)
+    await writeRecentBottles(addRecentBottle(recent, id.data))
   }
 
   return result

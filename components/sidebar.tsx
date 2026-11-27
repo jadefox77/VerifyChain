@@ -12,31 +12,35 @@ import {
   Package,
   ScanLine,
   ShieldAlert,
+  Users,
   X,
 } from "lucide-react"
+import { can, type Capability, type ManufacturerRole } from "@/lib/permissions"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Logo } from "@/components/ui/logo"
 
 interface SidebarProps {
   email: string
   companyName: string
+  role: ManufacturerRole
   signOutAction: () => Promise<void>
 }
 
-const navItems = [
+const navItems: { href: string; label: string; icon: typeof Boxes; exact?: boolean; needs?: Capability }[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/dashboard/products", label: "Products", icon: Package },
-  { href: "/dashboard/batches", label: "Batches", icon: Boxes },
-  { href: "/dashboard/scans", label: "Scan activity", icon: ScanLine },
-  { href: "/dashboard/fraud", label: "Fraud alerts", icon: ShieldAlert },
-  { href: "/dashboard/billing", label: "Plan and usage", icon: CreditCard },
+  { href: "/dashboard/products", label: "Products", icon: Package, needs: "viewProducts" },
+  { href: "/dashboard/batches", label: "Batches", icon: Boxes, needs: "viewBatches" },
+  { href: "/dashboard/scans", label: "Scan activity", icon: ScanLine, needs: "viewScans" },
+  { href: "/dashboard/fraud", label: "Fraud alerts", icon: ShieldAlert, needs: "viewFraud" },
+  { href: "/dashboard/team", label: "Team", icon: Users, needs: "manageTeam" },
+  { href: "/dashboard/billing", label: "Plan and usage", icon: CreditCard, needs: "viewBilling" },
 ]
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+function NavList({ role, onNavigate }: { role: ManufacturerRole; onNavigate?: () => void }) {
   const pathname = usePathname()
   return (
     <ul className="space-y-0.5">
-      {navItems.map(({ href, label, icon: Icon, exact }) => {
+      {navItems.filter((item) => !item.needs || can(role, item.needs)).map(({ href, label, icon: Icon, exact }) => {
         const active = exact ? pathname === href : pathname === href || pathname.startsWith(href + "/")
         return (
           <li key={href}>
@@ -123,7 +127,7 @@ export function Sidebar(props: SidebarProps) {
         inert={!open}
       >
         <nav aria-label="Dashboard" className="flex-1 overflow-y-auto p-3">
-          <NavList onNavigate={close} />
+          <NavList role={props.role} onNavigate={close} />
         </nav>
         <AccountFooter {...props} />
       </div>
@@ -136,7 +140,7 @@ export function Sidebar(props: SidebarProps) {
           </Link>
         </div>
         <nav aria-label="Dashboard" className="flex-1 overflow-y-auto px-3 py-2">
-          <NavList />
+          <NavList role={props.role} />
         </nav>
         <AccountFooter {...props} />
       </aside>

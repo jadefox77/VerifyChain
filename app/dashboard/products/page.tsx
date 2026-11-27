@@ -87,7 +87,7 @@ export default async function ProductsPage() {
                 {
                   value: "SINGLE",
                   title: "One code",
-                  body: "For cans, sachets, cartons and pouches. One scan, and each code can be confirmed as genuine once.",
+                  body: "For cans, sachets, cartons and pouches. One scan, and each code can be confirmed once. It cannot stop a copied code: whoever scans a copy first is told it is genuine, and only later scans of that code are caught. Use two codes wherever the pack has a cap.",
                 },
               ].map((opt) => (
                 <label

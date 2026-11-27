@@ -61,29 +61,41 @@ export default async function ScannerSetupPage() {
           Authentication
         </h2>
         <p className="text-xs text-gray-500 leading-relaxed">
-          Each request must include an HMAC-SHA256 signature of the
-          request body in the{" "}
-          <span className="text-gray-400">
-            X-Factory-Token
-          </span>{" "}
-          header. The HMAC key is your{" "}
-          <span className="text-gray-400">FACTORY_SECRET</span>{" "}
-          environment variable.
+          Each request carries three headers.{" "}
+          <span className="text-gray-400">X-Factory-Timestamp</span> is the
+          current Unix time in seconds.{" "}
+          <span className="text-gray-400">X-Factory-Nonce</span> is a new
+          random value for every request (16 to 64 letters, digits, - or _).{" "}
+          <span className="text-gray-400">X-Factory-Token</span> is the
+          HMAC-SHA256, in hex, of{" "}
+          <span className="text-gray-400">timestamp.nonce.body</span>, keyed
+          with your <span className="text-gray-400">FACTORY_SECRET</span>.
+          Sign the body exactly as you send it.
+        </p>
+        <p className="text-xs text-gray-500 leading-relaxed">
+          Requests more than 5 minutes from server time, and any nonce that was
+          already used, are refused with 401. Keep the scanner&apos;s clock set
+          automatically (NTP). To retry a failed request, sign it again with a
+          new timestamp and nonce.
         </p>
         <div className="p-3 bg-gray-800/60 rounded-lg border border-gray-700">
           <pre className="text-xs text-gray-400 whitespace-pre-wrap">{`// Node.js example
 const crypto = require('crypto')
 
 const payload = JSON.stringify(body)
+const timestamp = String(Math.floor(Date.now() / 1000))
+const nonce = crypto.randomBytes(16).toString('hex')
 const token = crypto
   .createHmac('sha256', process.env.FACTORY_SECRET)
-  .update(payload)
+  .update(\`\${timestamp}.\${nonce}.\${payload}\`)
   .digest('hex')
 
 fetch('${APP_URL}/api/factory/pairing', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
+    'X-Factory-Timestamp': timestamp,
+    'X-Factory-Nonce': nonce,
     'X-Factory-Token': token,
   },
   body: payload,
@@ -125,7 +137,7 @@ fetch('${APP_URL}/api/factory/pairing', {
               code: "401",
               color: "text-red-400",
               label: "Unauthorized",
-              desc: "Invalid factory token",
+              desc: "Bad signature, stale timestamp, or a nonce already used",
             },
             {
               code: "404",

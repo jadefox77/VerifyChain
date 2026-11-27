@@ -1,7 +1,7 @@
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 
-const redis = Redis.fromEnv()
+export const redis = Redis.fromEnv()
 
 // One phone. The device id comes from the anonymous vc_device cookie, so
 // shoppers who share a mobile network IP do not share this limit.

@@ -105,13 +105,13 @@ export function BottleVerify({ serialId, sig }: { serialId: string; sig?: string
       return (
         <ResultCard
           tone="good"
-          title="Genuine product"
+          title="Genuine code, first check"
           message={result.message}
           details={[
             { label: "Product", value: result.productName },
             { label: "Checked", value: fmt(result.openedAt) },
           ]}
-          note="This code can only be confirmed once. Anyone who scans it again will be told it was already checked."
+          note="A single code can be copied, and this check cannot tell an original pack from a copy that is scanned first. What it does mean: nobody had checked this code before you. If anyone scans it again, they will be told it was already checked, and scans from another phone are flagged to the manufacturer. Check the seal and packaging too."
         />
       )
 

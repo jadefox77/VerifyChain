@@ -128,9 +128,12 @@ export async function verifyBottle(
 
     return {
       status: "GENUINE_SINGLE",
-      message: `This ${
+      // Say only what one code can prove: the code was issued by the
+      // manufacturer and has not been checked before. A copy of the code,
+      // scanned first, would get this same answer.
+      message: `This is a real ${
         bottle.batch.product?.name ?? "product"
-      } is genuine. This is the first time its code has been checked.`,
+      } code, and this is the first time it has been checked.`,
       productName: bottle.batch.product?.name ?? "Unknown Product",
       authMode: "SINGLE",
       openedAt: new Date(),

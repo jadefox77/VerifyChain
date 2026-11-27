@@ -266,7 +266,8 @@ function HowItWorks() {
           </h2>
           <p className="mt-3 text-base text-gray-600 dark:text-gray-400">
             Bottles, jars and spirits use two codes. Cans, sachets and cartons use a
-            single code that can be confirmed as genuine once.
+            single code that can be confirmed once. A single code can be copied, so
+            it catches a copy when the code is scanned a second time, not the first.
           </p>
         </div>
 

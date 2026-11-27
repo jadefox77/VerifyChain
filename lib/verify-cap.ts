@@ -1,16 +1,21 @@
+import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
 export type ScanMeta = {
   channel?: string | null
   ipHash?: string | null
+  // Keyed hash of the anonymous device cookie (web scans only)
+  deviceHash?: string | null
   userAgent?: string | null
 }
 
 type CapVerifyInput = {
   hiddenSerialId: string
-  // The bottle the consumer actually scanned (from the verification cookie).
-  // When absent, the cap can still be verified, but refills cannot be caught.
-  bottleSerialId?: string
+  // The bottles the consumer actually scanned in the last few minutes (from
+  // the verification cookie), or a single id from an API caller. The cap
+  // must belong to one of them. When absent, the cap can still be verified,
+  // but refills cannot be caught.
+  bottleSerialIds?: string[]
   lat?: number
   lng?: number
   meta?: ScanMeta
@@ -54,16 +59,36 @@ function hasCoords(lat?: number, lng?: number): lat is number {
 }
 
 export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult> {
-  const { hiddenSerialId, bottleSerialId, lat, lng, meta } = input
+  return (await verifyCapDetailed(input)).result
+}
 
+// Same as verifyCap, and also says which bottle the cap belongs to, so the
+// caller can drop that bottle from its list of recent scans.
+export async function verifyCapDetailed(
+  input: CapVerifyInput
+): Promise<{ result: CapVerifyResult; capBottleSerialId: string | null }> {
   const cap = await prisma.cap.findUnique({
-    where: { hiddenSerialId },
+    where: { hiddenSerialId: input.hiddenSerialId },
     include: {
       bottle: {
         include: { batch: { include: { product: true } } },
       },
     },
   })
+  const result = await checkCap(input, cap)
+  return { result, capBottleSerialId: cap?.bottle?.serialId ?? null }
+}
+
+type CapWithBottle = Prisma.CapGetPayload<{
+  include: { bottle: { include: { batch: { include: { product: true } } } } }
+}>
+
+async function checkCap(
+  input: CapVerifyInput,
+  cap: CapWithBottle | null
+): Promise<CapVerifyResult> {
+  const { bottleSerialIds, lat, lng, meta } = input
+  const scanned = (bottleSerialIds ?? []).filter(Boolean)
 
   if (!cap) {
     return {
@@ -98,12 +123,13 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
         flagReason,
         channel: meta?.channel ?? null,
         ipHash: meta?.ipHash ?? null,
+        deviceHash: meta?.deviceHash ?? null,
         userAgent: meta?.userAgent ?? null,
       },
     })
 
   // Pairing check: the cap must belong to the bottle that was scanned
-  if (bottleSerialId && bottle.serialId !== bottleSerialId) {
+  if (scanned.length > 0 && !scanned.includes(bottle.serialId)) {
     await logScan(true, "Cap and bottle identity mismatch")
     await prisma.cap.update({ where: { id: cap.id }, data: { status: "FLAGGED" } })
     await prisma.bottle.update({ where: { id: bottleId }, data: { status: "FLAGGED" } })
@@ -177,6 +203,6 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
     message: `This ${productName} is genuine. This is the first time the cap has been opened.`,
     productName,
     openedAt: now,
-    pairingChecked: Boolean(bottleSerialId),
+    pairingChecked: scanned.length > 0,
   }
 }

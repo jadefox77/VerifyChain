@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { AuthError } from "next-auth"
-import { auth, signIn } from "@/lib/auth"
+import { auth, signIn, TooManyAttempts } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { homePathFor } from "@/lib/home-path"
 import { AuthCard, AuthShell, Notice } from "@/components/ui/auth-shell"
@@ -15,6 +15,7 @@ export const metadata: Metadata = {
 
 const ERRORS: Record<string, string> = {
   invalid: "That email and password do not match an account. Check them and try again.",
+  rate_limited: "Too many sign-in attempts. Wait 15 minutes, then try again.",
 }
 
 export default async function LoginPage({
@@ -121,6 +122,7 @@ async function handleCredentialsSignIn(formData: FormData) {
   try {
     await signIn("credentials", { email, password, redirect: false })
   } catch (err) {
+    if (err instanceof TooManyAttempts) redirect("/login?error=rate_limited")
     if (err instanceof AuthError) redirect("/login?error=invalid")
     throw err
   }

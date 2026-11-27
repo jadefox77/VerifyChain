@@ -1,10 +1,24 @@
-import NextAuth from "next-auth"
+import NextAuth, { CredentialsSignin } from "next-auth"
 import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import type { UserRole } from "@prisma/client"
+import {
+  allowRequest,
+  loginEmailRatelimit,
+  loginIpRatelimit,
+  resetLimit,
+} from "@/lib/ratelimit"
+import { clientIpFrom } from "@/lib/request-meta"
+
+// Shown on the login page as ?error=CredentialsSignin&code=rate_limited.
+// It says only that there were too many attempts, never whether the email
+// belongs to an account.
+export class TooManyAttempts extends CredentialsSignin {
+  code = "rate_limited"
+}
 
 // Shape returned by the credentials provider's authorize() below.
 type AuthorizedUser = {
@@ -36,8 +50,20 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
   if (!credentials?.email || !credentials?.password) return null
+
+  // Limit password guesses. This runs inside authorize() so it also covers
+  // direct POSTs to /api/auth/callback/credentials, not only the login page.
+  // Per email stops guessing one account from many IPs; per IP stops one
+  // source trying many accounts. If Redis is down the attempt is allowed.
+  const email = String(credentials.email).trim().toLowerCase()
+  const ip = clientIpFrom(request.headers)
+  const [emailOk, ipOk] = await Promise.all([
+    allowRequest(loginEmailRatelimit, email),
+    ip === "anonymous" ? Promise.resolve(true) : allowRequest(loginIpRatelimit, ip),
+  ])
+  if (!emailOk || !ipOk) throw new TooManyAttempts()
 
   const user = await prisma.user.findUnique({
     where: { email: credentials.email as string },
@@ -62,6 +88,10 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   )
 
   if (!passwordMatch) return null
+
+  // A correct password clears the count for this email, so a user who
+  // mistyped a few times is not left close to the limit.
+  await resetLimit(loginEmailRatelimit, email)
 
   return {
     id: user.id,

@@ -90,6 +90,7 @@ export async function verifyBottle(
       flagReason: null,
       channel: meta?.channel ?? null,
       ipHash: meta?.ipHash ?? null,
+      deviceHash: meta?.deviceHash ?? null,
       userAgent: meta?.userAgent ?? null,
     },
   })
@@ -152,6 +153,7 @@ export async function verifyBottle(
           "Cap opened before the bottle label was scanned (possible refill)",
         channel: meta?.channel ?? null,
         ipHash: meta?.ipHash ?? null,
+        deviceHash: meta?.deviceHash ?? null,
         userAgent: meta?.userAgent ?? null,
       },
     })

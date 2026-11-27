@@ -1,6 +1,7 @@
 import { getAdminSession, canWrite } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { NextRequest } from "next/server"
+import { seeOther } from "@/lib/see-other"
 
 export async function POST(
   req: NextRequest,
@@ -27,5 +28,5 @@ export async function POST(
     },
   })
 
-  return Response.redirect(new URL(`/admin/onboarding`, req.url))
+  return seeOther("/admin/onboarding")
 }

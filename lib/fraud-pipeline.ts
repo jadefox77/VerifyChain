@@ -13,7 +13,11 @@ const VELOCITY_SUSPICIOUS = 3      // scans of same bottle in 24hrs
 const VELOCITY_HIGH_CONCERN = 10   // scans of same bottle in 24hrs
 const TELEPORT_SPEED_KMH = 500     // impossible travel speed threshold
 const DRIFT_RADIUS_KM = 300        // supply chain drift threshold
-const BOT_SCAN_COUNT = 50          // scans from the same source (hashed IP) in 2 minutes
+const BOT_SCAN_COUNT = 50          // scans from the same device in 2 minutes
+// Many phones share one mobile network IP, so a source that is only an IP
+// needs far more scans before it counts as a bot. This still catches scripts
+// that throw away their device cookie.
+const BOT_IP_SCAN_COUNT = 300      // scans from the same hashed IP in 2 minutes
 const BOT_TIME_WINDOW_MS = 2 * 60 * 1000
 
 // ── Haversine ────────────────────────────────────────────────────────────────
@@ -373,14 +377,17 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
   }
 
   // ── 4. Bot behavior detection ─────────────────────────────────────────────
-  // Same source (hashed IP) scanning many bottles in a very short window
+  // Same source scanning many bottles in a very short window. A source is the
+  // anonymous device when the scan has one, and separately the hashed IP with
+  // a much higher threshold.
 
   const recentScans = await prisma.scanLog.findMany({
     where: {
-      ipHash: { not: null },
+      OR: [{ deviceHash: { not: null } }, { ipHash: { not: null } }],
       scannedAt: { gte: new Date(Date.now() - BOT_TIME_WINDOW_MS) },
     },
     select: {
+      deviceHash: true,
       ipHash: true,
       bottleId: true,
       scannedAt: true,
@@ -391,15 +398,20 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
 
   // Group by source
   const bySource: Record<string, typeof recentScans> = {}
-
-  for (const scan of recentScans) {
-    if (!scan.ipHash) continue
-    if (!bySource[scan.ipHash]) bySource[scan.ipHash] = []
-    bySource[scan.ipHash].push(scan)
+  const add = (key: string, scan: (typeof recentScans)[number]) => {
+    if (!bySource[key]) bySource[key] = []
+    bySource[key].push(scan)
   }
 
-  for (const [source, scans] of Object.entries(bySource)) {
-    if (scans.length < BOT_SCAN_COUNT) continue
+  for (const scan of recentScans) {
+    if (scan.deviceHash) add(`device:${scan.deviceHash}`, scan)
+    if (scan.ipHash) add(`ip:${scan.ipHash}`, scan)
+  }
+
+  for (const [key, scans] of Object.entries(bySource)) {
+    const isIp = key.startsWith("ip:")
+    if (scans.length < (isIp ? BOT_IP_SCAN_COUNT : BOT_SCAN_COUNT)) continue
+    const source = key.slice(key.indexOf(":") + 1)
 
     checks.bot++
 
@@ -425,8 +437,9 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
           type: "BOT_ACTIVITY",
           severity: "HIGH_CONCERN",
           manufacturerId,
-          message: `${scans.length} scans from one source in under 2 minutes, which suggests automated scanning`,
+          message: `${scans.length} scans from one ${isIp ? "IP address" : "device"} in under 2 minutes, which suggests automated scanning`,
           detail: JSON.stringify({
+            sourceType: isIp ? "ip" : "device",
             sourceHash: source.slice(0, 12),
             scanCount: scans.length,
             uniqueBottles,

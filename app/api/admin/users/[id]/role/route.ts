@@ -1,6 +1,7 @@
 import { getAdminSession, isSuperAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { NextRequest } from "next/server"
+import { seeOther } from "@/lib/see-other"
 import type { UserRole } from "@prisma/client"
 
 const VALID_ROLES: UserRole[] = [
@@ -63,5 +64,5 @@ export async function POST(
     },
   })
 
-  return Response.redirect(new URL("/admin/users", req.url))
+  return seeOther("/admin/users")
 }

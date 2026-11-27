@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyBottle } from "@/lib/verify"
-import { verifyRatelimit } from "@/lib/ratelimit"
+import { allowRequest, verifyRatelimit } from "@/lib/ratelimit"
 import { z } from "zod"
 import { clientIpFrom, hashIp } from "@/lib/request-meta"
 
@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
   const ip = clientIpFrom(req.headers)
 
   try {
-    const { success } = await verifyRatelimit.limit(ip)
-    if (!success) {
+    // API callers have no device cookie, so this stays per IP. If Redis is
+    // down the request is allowed rather than failing.
+    if (!(await allowRequest(verifyRatelimit, `api:ip:${ip}`))) {
       return NextResponse.json(
         { error: "Too many requests. Please slow down." },
         { status: 429 }

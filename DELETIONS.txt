@@ -1,8 +1,0 @@
-Delete this file after extracting the zip:
-
-components/nav-link.tsx
-
-It was not imported anywhere. On Windows PowerShell, from the project folder:
-  Remove-Item components/nav-link.tsx
-On macOS or Linux:
-  rm components/nav-link.tsx

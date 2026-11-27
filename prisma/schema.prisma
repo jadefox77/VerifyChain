@@ -327,6 +327,7 @@ model ScanLog {
   // Channel
   channel     String?  // "web" | "api"
   ipHash      String?  // Keyed hash of the client IP, never the raw IP
+  deviceHash  String?  // Keyed hash of the anonymous vc_device cookie (web scans)
   userAgent   String?
 
   // Timing
@@ -339,6 +340,7 @@ model ScanLog {
   @@index([scannedAt])
   @@index([lat, lng])
   @@index([ipHash, scannedAt])
+  @@index([deviceHash, scannedAt])
 }
 
 // =============================================================================

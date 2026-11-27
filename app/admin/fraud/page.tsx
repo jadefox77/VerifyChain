@@ -1,5 +1,6 @@
 import { requireFraudAccess } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
+import { startOfLagosDay } from "@/lib/lagos-time"
 import { FraudMapWrapper } from "@/components/admin/fraud-map-wrapper"
 import {
   ShieldAlert,
@@ -20,40 +21,20 @@ export const revalidate = 30
 // ── Data fetchers ─────────────────────────────────────────────────────────────
 
 async function getFraudSummary() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = startOfLagosDay()
 
-  // Batch 1
-  const [totalAlerts, criticalAlerts, highConcernAlerts] =
-    await Promise.all([
-      prisma.alertLog.count({ where: { resolved: false } }),
-      prisma.alertLog.count({
-        where: { severity: "CRITICAL", resolved: false },
-      }),
-      prisma.alertLog.count({
-        where: { severity: "HIGH_CONCERN", resolved: false },
-      }),
-    ])
-
-  // Batch 2
-  const [suspiciousAlerts, resolvedToday, alertsByType] =
-    await Promise.all([
-      prisma.alertLog.count({
-        where: { severity: "SUSPICIOUS", resolved: false },
-      }),
-      prisma.alertLog.count({
-        where: { resolved: true, resolvedAt: { gte: today } },
-      }),
-      prisma.alertLog.groupBy({
-        by: ["type"],
-        _count: true,
-        where: { resolved: false },
-        orderBy: { _count: { type: "desc" } },
-      }),
-    ])
-
-  // Batch 3
-  const [manufacturerFraudRates, recentCritical] = await Promise.all([
+  // All in parallel. Open alerts per severity come from one grouped query.
+  const [openBySeverity, resolvedToday, alertsByType, manufacturerFraudRates, recentCritical] = await Promise.all([
+    prisma.alertLog.groupBy({ by: ["severity"], _count: true, where: { resolved: false } }),
+    prisma.alertLog.count({
+      where: { resolved: true, resolvedAt: { gte: today } },
+    }),
+    prisma.alertLog.groupBy({
+      by: ["type"],
+      _count: true,
+      where: { resolved: false },
+      orderBy: { _count: { type: "desc" } },
+    }),
     prisma.manufacturer.findMany({
       where: { onboardingStatus: "ACTIVE_PRODUCTION" },
       select: {
@@ -79,6 +60,12 @@ async function getFraudSummary() {
       },
     }),
   ])
+
+  const open = (sev: string) => openBySeverity.find((r) => r.severity === sev)?._count ?? 0
+  const totalAlerts = openBySeverity.reduce((a, r) => a + r._count, 0)
+  const criticalAlerts = open("CRITICAL")
+  const highConcernAlerts = open("HIGH_CONCERN")
+  const suspiciousAlerts = open("SUSPICIOUS")
 
   return {
     totalAlerts,
@@ -115,7 +102,9 @@ async function getScanPoints() {
 }
 
 async function getRegionalBreakdown() {
-  const result = await prisma.scanLog.groupBy({
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const [result, fraudByRegion] = await Promise.all([
+    prisma.scanLog.groupBy({
     by: ["region"],
     _count: true,
     where: {
@@ -126,19 +115,13 @@ async function getRegionalBreakdown() {
     },
     orderBy: { _count: { region: "desc" } },
     take: 10,
-  })
-
-  const fraudByRegion = await prisma.scanLog.groupBy({
-    by: ["region"],
-    _count: true,
-    where: {
-      region: { not: null },
-      fraudFlag: true,
-      scannedAt: {
-        gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      },
-    },
-  })
+  }),
+    prisma.scanLog.groupBy({
+      by: ["region"],
+      _count: true,
+      where: { region: { not: null }, fraudFlag: true, scannedAt: { gte: since } },
+    }),
+  ])
 
   return result.map((r) => ({
     region: r.region!,
@@ -240,14 +223,11 @@ const SEVERITY_CONFIG = {
 export default async function FraudIntelligencePage() {
   await requireFraudAccess()
 
-// Batch A — summary and scan points together
-const [summary, scanPoints] = await Promise.all([
-  getFraudSummary(),
-  getScanPoints(),
-])
-
-// Regional breakdown after
-const regional = await getRegionalBreakdown()
+  const [summary, scanPoints, regional] = await Promise.all([
+    getFraudSummary(),
+    getScanPoints(),
+    getRegionalBreakdown(),
+  ])
 
 
   const mapPoints = scanPoints

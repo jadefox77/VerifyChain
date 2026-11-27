@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
+import { lastLagosDays, startOfLagosDay, startOfLagosMonth } from "@/lib/lagos-time"
 import {
   BarChart3,
   Scan,
@@ -13,109 +14,108 @@ import {
 export const revalidate = 30
 
 async function getAnalyticsData() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const thisMonthStart = new Date()
-  thisMonthStart.setDate(1)
-  thisMonthStart.setHours(0, 0, 0, 0)
-
+  const today = startOfLagosDay()
+  const thisMonthStart = startOfLagosMonth()
   const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const days = lastLagosDays(14)
   const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-  // ── Batch 1 — core totals ─────────────────────────────────────────────────
-  const totalScansAllTime = await prisma.scanLog.count()
-  const totalScansToday = await prisma.scanLog.count({
-    where: { scannedAt: { gte: today } },
-  })
-  const totalScansThisMonth = await prisma.scanLog.count({
-    where: { scannedAt: { gte: thisMonthStart } },
-  })
+  // Every query runs at the same time, and the totals, daily and hourly
+  // figures are each computed by the database in a single query. This page
+  // used to make about 40 queries one after another, which was slow when the
+  // database is far from the server.
+  const [totals, firstOpenEvents, repeatScans, topRegions, manufacturerScanRanking, daily, hourly] = await Promise.all([
+    prisma.$queryRaw<
+      {
+        all_time: bigint
+        today: bigint
+        this_month: bigint
+        genuine: bigint
+        flagged: bigint
+        bottle_layer: bigint
+        cap_layer: bigint
+      }[]
+    >`
+      SELECT
+        count(*)                                              AS all_time,
+        count(*) FILTER (WHERE "scannedAt" >= ${today})          AS today,
+        count(*) FILTER (WHERE "scannedAt" >= ${thisMonthStart}) AS this_month,
+        count(*) FILTER (WHERE "fraudFlag" = false)              AS genuine,
+        count(*) FILTER (WHERE "fraudFlag" = true)               AS flagged,
+        count(*) FILTER (WHERE "scanLayer" = 'BOTTLE')           AS bottle_layer,
+        count(*) FILTER (WHERE "scanLayer" = 'CAP')              AS cap_layer
+      FROM "ScanLog"
+    `,
+    prisma.cap.count({ where: { status: "OPENED" } }),
+    prisma.scanLog.count({
+      where: {
+        scanLayer: "BOTTLE",
+        fraudFlag: false,
+        bottle: { status: "OPENED" },
+      },
+    }),
+    prisma.scanLog.groupBy({
+      by: ["region"],
+      _count: true,
+      where: {
+        region: { not: null },
+        scannedAt: { gte: last30Days },
+      },
+      orderBy: { _count: { region: "desc" } },
+      take: 8,
+    }),
+    prisma.manufacturer.findMany({
+      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+      select: {
+        id: true,
+        companyName: true,
+        totalScans: true,
+        totalFraudFlags: true,
+        fraudRateCached: true,
+      },
+      orderBy: { totalScans: "desc" },
+      take: 8,
+    }),
+    // Scans per Lagos day for the last 14 days
+    prisma.$queryRaw<{ day: string; total: bigint; fraud: bigint }[]>`
+      SELECT to_char("scannedAt" + interval '1 hour', 'YYYY-MM-DD') AS day,
+             count(*) AS total,
+             count(*) FILTER (WHERE "fraudFlag" = true) AS fraud
+      FROM "ScanLog"
+      WHERE "scannedAt" >= ${days[0].start}
+      GROUP BY 1
+    `,
+    // Scans per hour of the day (Lagos time) over the last 7 days
+    prisma.$queryRaw<{ hour: number; count: bigint }[]>`
+      SELECT extract(hour FROM "scannedAt" + interval '1 hour')::int AS hour,
+             count(*) AS count
+      FROM "ScanLog"
+      WHERE "scannedAt" >= ${last7Days}
+      GROUP BY 1
+    `,
+  ])
 
-  // ── Batch 2 — scan type breakdown ─────────────────────────────────────────
-  const genuineScans = await prisma.scanLog.count({
-    where: { fraudFlag: false },
-  })
-  const fraudScans = await prisma.scanLog.count({
-    where: { fraudFlag: true },
-  })
-  const bottleLayerScans = await prisma.scanLog.count({
-    where: { scanLayer: "BOTTLE" },
-  })
-  const capLayerScans = await prisma.scanLog.count({
-    where: { scanLayer: "CAP" },
-  })
+  const t = totals[0]
+  const totalScansAllTime = Number(t.all_time)
+  const totalScansToday = Number(t.today)
+  const totalScansThisMonth = Number(t.this_month)
+  const genuineScans = Number(t.genuine)
+  const fraudScans = Number(t.flagged)
+  const bottleLayerScans = Number(t.bottle_layer)
+  const capLayerScans = Number(t.cap_layer)
 
-  // ── Batch 3 — engagement metrics ─────────────────────────────────────────
-  const firstOpenEvents = await prisma.cap.count({
-    where: { status: "OPENED" },
-  })
-  const repeatScans = await prisma.scanLog.count({
-    where: {
-      scanLayer: "BOTTLE",
-      fraudFlag: false,
-      bottle: { status: "OPENED" },
-    },
-  })
-
-  // ── Batch 4 — grouped queries ─────────────────────────────────────────────
-  const topRegions = await prisma.scanLog.groupBy({
-    by: ["region"],
-    _count: true,
-    where: {
-      region: { not: null },
-      scannedAt: { gte: last30Days },
-    },
-    orderBy: { _count: { region: "desc" } },
-    take: 8,
-  })
-
-  const manufacturerScanRanking = await prisma.manufacturer.findMany({
-    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-    select: {
-      id: true,
-      companyName: true,
-      totalScans: true,
-      totalFraudFlags: true,
-      fraudRateCached: true,
-    },
-    orderBy: { totalScans: "desc" },
-    take: 8,
-  })
-
-  // ── Batch 5 — hourly distribution (single query, compute in JS) ───────────
-  const rawHourlyScans = await prisma.scanLog.findMany({
-    where: { scannedAt: { gte: last7Days } },
-    select: { scannedAt: true },
-  })
-
-  const hourlyCounts = new Array(24).fill(0)
-  rawHourlyScans.forEach(({ scannedAt }) => {
-    const hour = new Date(scannedAt).getHours()
-    hourlyCounts[hour]++
-  })
-  const hourlyDistribution = hourlyCounts.map((count, hour) => ({
-    hour,
-    count,
+  const byDay = new Map(daily.map((r) => [r.day, r]))
+  const dailyScans = days.map(({ start, key }) => ({
+    day: start,
+    total: Number(byDay.get(key)?.total ?? 0),
+    fraud: Number(byDay.get(key)?.fraud ?? 0),
   }))
 
-  // ── Batch 6 — daily scans (sequential, not parallel) ─────────────────────
-  const dailyScans: { day: Date; total: number; fraud: number }[] = []
-  for (let i = 0; i < 14; i++) {
-    const day = new Date()
-    day.setDate(day.getDate() - (13 - i))
-    day.setHours(0, 0, 0, 0)
-    const next = new Date(day)
-    next.setDate(next.getDate() + 1)
-
-    const total = await prisma.scanLog.count({
-      where: { scannedAt: { gte: day, lt: next } },
-    })
-    const fraud = await prisma.scanLog.count({
-      where: { scannedAt: { gte: day, lt: next }, fraudFlag: true },
-    })
-    dailyScans.push({ day, total, fraud })
-  }
+  const byHour = new Map(hourly.map((r) => [r.hour, Number(r.count)]))
+  const hourlyDistribution = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    count: byHour.get(hour) ?? 0,
+  }))
 
   return {
     totalScansAllTime,
@@ -161,7 +161,7 @@ export default async function AnalyticsPage() {
   // 14-day label — show every other day
   const dayLabels = data.dailyScans.map(({ day }, i) =>
     i % 2 === 0
-      ? day.toLocaleDateString("en-NG", { day: "numeric", month: "short" })
+      ? day.toLocaleDateString("en-NG", { day: "numeric", month: "short", timeZone: "Africa/Lagos" })
       : ""
   )
 
@@ -170,10 +170,10 @@ export default async function AnalyticsPage() {
       {/* Header */}
       <div>
         <h1 className="text-lg font-bold text-white tracking-tight">
-          Verification Analytics
+          Analytics
         </h1>
         <p className="text-xs text-gray-500 mt-0.5">
-          Platform-wide scan intelligence · All manufacturers combined
+          Shopper scans across all manufacturers.
         </p>
       </div>
 
@@ -393,7 +393,7 @@ export default async function AnalyticsPage() {
         {/* Hourly distribution */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
           <h2 className="text-xs text-gray-400 mb-4 font-medium">
-            Scans by hour, last 7 days
+            Scans by hour (Lagos time), last 7 days
           </h2>
 
           {data.hourlyDistribution.length === 0 ? (

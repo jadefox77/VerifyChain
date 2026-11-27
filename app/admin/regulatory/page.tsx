@@ -1,5 +1,6 @@
 import { requireRegulatoryAccess } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
+import { lastLagosMonths } from "@/lib/lagos-time"
 import {
   ScrollText,
   ShieldAlert,
@@ -17,92 +18,62 @@ async function getRegulatoryData() {
   const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const last90Days = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
 
-  // Batch 1
-  const [totalManufacturers, activeManufacturers, pendingManufacturers] =
-    await Promise.all([
-      prisma.manufacturer.count(),
-      prisma.manufacturer.count({
-        where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-      }),
-      prisma.manufacturer.count({
-        where: {
-          onboardingStatus: {
-            in: [
-              "PENDING_REVIEW",
-              "COMPLIANCE_VERIFICATION",
-              "TECHNICAL_INTEGRATION",
-              "PILOT_APPROVAL",
-            ],
-          },
-        },
-      }),
-    ])
+  const months = lastLagosMonths(6)
 
-  // Batch 2
-  const [suspendedManufacturers, totalBottlesAuthenticated, totalFraudEvents] =
-    await Promise.all([
-      prisma.manufacturer.count({
-        where: { onboardingStatus: "SUSPENDED" },
-      }),
-      prisma.bottle.count({
-        where: { status: "OPENED" },
-      }),
-      prisma.alertLog.count({
-        where: {
-          createdAt: { gte: last30Days },
-          severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
+  // Everything runs at the same time. Counts per stage, flagged units per
+  // batch and the monthly trend are each one query, instead of a long chain
+  // of queries run one after another.
+  const [
+    statusCounts,
+    totalBottlesAuthenticated,
+    totalFraudEvents,
+    criticalIncidents,
+    fraudByRegion,
+    suspiciousBatches,
+    manufacturerCompliance,
+    recentIncidents,
+    monthlyIncidents,
+    monthlyScans,
+  ] = await Promise.all([
+    prisma.manufacturer.groupBy({ by: ["onboardingStatus"], _count: true }),
+    prisma.bottle.count({ where: { status: "OPENED" } }),
+    prisma.alertLog.count({
+      where: {
+        createdAt: { gte: last30Days },
+        severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
+      },
+    }),
+    prisma.alertLog.count({
+      where: { createdAt: { gte: last90Days }, severity: "CRITICAL" },
+    }),
+    prisma.scanLog.groupBy({
+      by: ["region"],
+      _count: true,
+      where: {
+        fraudFlag: true,
+        region: { not: null },
+        scannedAt: { gte: last30Days },
+      },
+      orderBy: { _count: { region: "desc" } },
+      take: 10,
+    }),
+    prisma.batch.findMany({
+      where: { bottles: { some: { status: "FLAGGED" } } },
+      select: {
+        id: true,
+        batchCode: true,
+        createdAt: true,
+        targetRegion: true,
+        bottleCount: true,
+        manufacturer: {
+          select: { id: true, companyName: true, rcNumber: true, nafdacNumbers: true },
         },
-      }),
-    ])
-
-  // Batch 3
-  const [criticalIncidents, fraudByRegion, suspiciousBatches] =
-    await Promise.all([
-      prisma.alertLog.count({
-        where: {
-          createdAt: { gte: last90Days },
-          severity: "CRITICAL",
-        },
-      }),
-      prisma.scanLog.groupBy({
-        by: ["region"],
-        _count: true,
-        where: {
-          fraudFlag: true,
-          region: { not: null },
-          scannedAt: { gte: last30Days },
-        },
-        orderBy: { _count: { region: "desc" } },
-        take: 10,
-      }),
-      prisma.batch.findMany({
-        where: {
-          bottles: { some: { status: "FLAGGED" } },
-        },
-        select: {
-          id: true,
-          batchCode: true,
-          createdAt: true,
-          targetRegion: true,
-          bottleCount: true,
-          manufacturer: {
-            select: {
-              id: true,
-              companyName: true,
-              rcNumber: true,
-              nafdacNumbers: true,
-            },
-          },
-          product: { select: { name: true } },
-          _count: { select: { bottles: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 15,
-      }),
-    ])
-
-  // Batch 4
-  const [manufacturerCompliance, recentIncidents] = await Promise.all([
+        product: { select: { name: true } },
+        _count: { select: { bottles: { where: { status: "FLAGGED" } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 15,
+    }),
     prisma.manufacturer.findMany({
       where: { onboardingStatus: "ACTIVE_PRODUCTION" },
       select: {
@@ -126,64 +97,45 @@ async function getRegulatoryData() {
       orderBy: { createdAt: "desc" },
       take: 20,
       include: {
-        manufacturer: {
-          select: { companyName: true, rcNumber: true },
-        },
+        manufacturer: { select: { companyName: true, rcNumber: true } },
       },
     }),
+    prisma.$queryRaw<{ month: string; count: bigint }[]>`
+      SELECT to_char("createdAt" + interval '1 hour', 'YYYY-MM') AS month, count(*) AS count
+      FROM "AlertLog"
+      WHERE "createdAt" >= ${months[0].start}
+        AND "severity" IN ('HIGH_CONCERN', 'CRITICAL')
+      GROUP BY 1
+    `,
+    prisma.$queryRaw<{ month: string; count: bigint }[]>`
+      SELECT to_char("scannedAt" + interval '1 hour', 'YYYY-MM') AS month, count(*) AS count
+      FROM "ScanLog"
+      WHERE "scannedAt" >= ${months[0].start}
+      GROUP BY 1
+    `,
   ])
 
-  // Flagged counts per batch — keep sequential, small loop
-  const suspiciousBatchesWithFlagCounts = []
-  for (const batch of suspiciousBatches) {
-    const flaggedCount = await prisma.bottle.count({
-      where: { batchId: batch.id, status: "FLAGGED" },
-    })
-    suspiciousBatchesWithFlagCounts.push({ ...batch, flaggedCount })
-  }
+  const countFor = (...statuses: string[]) =>
+    statusCounts.filter((s) => statuses.includes(s.onboardingStatus)).reduce((a, s) => a + s._count, 0)
 
-  // Monthly trend — sequential loop, 6 months
-  const monthlyFraudTrend = []
-  for (let i = 0; i < 6; i++) {
-    const monthStart = new Date()
-    monthStart.setDate(1)
-    monthStart.setHours(0, 0, 0, 0)
-    monthStart.setMonth(monthStart.getMonth() - (5 - i))
-    const monthEnd = new Date(monthStart)
-    monthEnd.setMonth(monthEnd.getMonth() + 1)
-
-    const [incidents, scans] = await Promise.all([
-      prisma.alertLog.count({
-        where: {
-          createdAt: { gte: monthStart, lt: monthEnd },
-          severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
-        },
-      }),
-      prisma.scanLog.count({
-        where: { scannedAt: { gte: monthStart, lt: monthEnd } },
-      }),
-    ])
-
-    monthlyFraudTrend.push({
-      month: monthStart.toLocaleDateString("en-NG", {
-        month: "short",
-        year: "numeric",
-      }),
-      incidents,
-      scans,
-    })
-  }
+  const incidentsByMonth = new Map(monthlyIncidents.map((r) => [r.month, Number(r.count)]))
+  const scansByMonth = new Map(monthlyScans.map((r) => [r.month, Number(r.count)]))
+  const monthlyFraudTrend = months.map(({ start, key }) => ({
+    month: start.toLocaleDateString("en-NG", { month: "short", year: "numeric", timeZone: "Africa/Lagos" }),
+    incidents: incidentsByMonth.get(key) ?? 0,
+    scans: scansByMonth.get(key) ?? 0,
+  }))
 
   return {
-    totalManufacturers,
-    activeManufacturers,
-    pendingManufacturers,
-    suspendedManufacturers,
+    totalManufacturers: statusCounts.reduce((a, s) => a + s._count, 0),
+    activeManufacturers: countFor("ACTIVE_PRODUCTION"),
+    pendingManufacturers: countFor("PENDING_REVIEW", "COMPLIANCE_VERIFICATION", "TECHNICAL_INTEGRATION", "PILOT_APPROVAL"),
+    suspendedManufacturers: countFor("SUSPENDED"),
     totalBottlesAuthenticated,
     totalFraudEvents,
     criticalIncidents,
     fraudByRegion,
-    suspiciousBatches: suspiciousBatchesWithFlagCounts,
+    suspiciousBatches: suspiciousBatches.map(({ _count, ...b }) => ({ ...b, flaggedCount: _count.bottles })),
     manufacturerCompliance,
     recentIncidents,
     monthlyFraudTrend,
@@ -227,11 +179,11 @@ export default async function RegulatoryPage() {
           <div className="flex items-center gap-2 mb-1">
             <ScrollText className="w-4 h-4 text-teal-400" />
             <h1 className="text-lg font-bold text-white tracking-tight">
-              Regulatory Intelligence View
+              Regulatory
             </h1>
           </div>
           <p className="text-xs text-gray-500">
-            Read-only · NAFDAC / SON observer access ·{" "}
+            Read-only view for regulators ·{" "}
             {new Date().toLocaleDateString("en-NG", {
               day: "numeric",
               month: "long",
@@ -254,8 +206,7 @@ export default async function RegulatoryPage() {
       <div className="flex items-center gap-2 px-4 py-2.5 bg-teal-500/5 border border-teal-500/20 rounded-lg">
         <ShieldAlert className="w-3.5 h-3.5 text-teal-400 shrink-0" />
         <p className="text-xs text-teal-400">
-          This view is read-only. Data reflects live platform intelligence.
-          All manufacturer activity is monitored and logged.
+          This view is read-only. Figures come from the live database.
         </p>
       </div>
 

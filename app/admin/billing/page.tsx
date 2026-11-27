@@ -53,8 +53,8 @@ const STATUS_CONFIG = {
 }
 
 async function getBillingData() {
-  // Batch 1
-  const [manufacturers, planCounts, statusCounts] = await Promise.all([
+  // All queries run at the same time
+  const [manufacturers, planCounts, statusCounts, monthlyUnits, totalBottlesAllTime, pastDueCount] = await Promise.all([
     prisma.manufacturer.findMany({
       where: { onboardingStatus: "ACTIVE_PRODUCTION" },
       select: {
@@ -79,18 +79,12 @@ async function getBillingData() {
       _count: true,
       where: { onboardingStatus: "ACTIVE_PRODUCTION" },
     }),
-  ])
-
-  // Units serialised this month per manufacturer, the figure plan limits apply to
-  const monthlyUnits = await prisma.bottle.groupBy({
-    by: ["manufacturerId"],
-    _count: true,
-    where: { createdAt: { gte: monthWindow().start } },
-  })
-  const unitsThisMonth = new Map(monthlyUnits.map((r) => [r.manufacturerId, r._count]))
-
-  // Batch 2
-  const [totalBottlesAllTime, pastDueCount] = await Promise.all([
+    // Units serialised this month per manufacturer, the figure plan limits apply to
+    prisma.bottle.groupBy({
+      by: ["manufacturerId"],
+      _count: true,
+      where: { createdAt: { gte: monthWindow().start } },
+    }),
     prisma.bottle.count(),
     prisma.manufacturer.count({
       where: {
@@ -99,6 +93,8 @@ async function getBillingData() {
       },
     }),
   ])
+
+  const unitsThisMonth = new Map(monthlyUnits.map((r) => [r.manufacturerId, r._count]))
 
   // Compute MRR from plan counts
   const mrr = planCounts.reduce((sum, p) => {

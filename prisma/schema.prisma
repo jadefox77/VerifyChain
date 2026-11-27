@@ -121,7 +121,7 @@ model User {
   tempPasswordUsed  Boolean   @default(false)
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([email])
   @@index([role])
@@ -182,7 +182,7 @@ model Manufacturer {
   adminNotes AdminNote[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([onboardingStatus])
   @@index([subscriptionPlan])
@@ -209,7 +209,7 @@ model Product {
   batches Batch[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([manufacturerId])
 }
@@ -236,7 +236,7 @@ model Batch {
   scanLogs ScanLog[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   generationMode String @default("PRE_PAIRED")
 
@@ -264,7 +264,7 @@ model Bottle {
   scanLogs ScanLog[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([serialId])
   @@index([manufacturerId])
@@ -287,7 +287,7 @@ model Cap {
   status         CapStatus @default(SEALED)
   openedAt       DateTime?
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  updatedAt      DateTime @default(now()) @updatedAt
 
   scanLogs ScanLog[]
 

@@ -9,90 +9,94 @@ import {
   ChevronRight,
 } from "lucide-react"
 import Link from "next/link"
+import { lastLagosDays, startOfLagosDay, startOfLagosMonth } from "@/lib/lagos-time"
+import { describeUsage } from "@/lib/plans"
 
 export const revalidate = 30
 
-const PLAN_LIMITS: Record<string, number> = {
-  FREE: 5000,
-  STARTER: 50000,
-  PROFESSIONAL: 500000,
-  ENTERPRISE: Infinity,
-}
-
 async function getSerializationMetrics() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = startOfLagosDay()
+  const thisMonthStart = startOfLagosMonth()
+  const days = lastLagosDays(7)
 
-  const thisMonthStart = new Date()
-  thisMonthStart.setDate(1)
-  thisMonthStart.setHours(0, 0, 0, 0)
-
-  // Batch 1
-  const [totalAllTime, totalToday, totalThisMonth] = await Promise.all([
-    prisma.bottle.count(),
-    prisma.bottle.count({ where: { createdAt: { gte: today } } }),
-    prisma.bottle.count({ where: { createdAt: { gte: thisMonthStart } } }),
-  ])
-
-  // Batch 2
-  const [totalCaps, flaggedBottles, bottlesWithoutCaps] = await Promise.all([
+  // All queries run at the same time, and the unit totals and daily counts
+  // are each one query, instead of about 20 queries one after another.
+  const [
+    unitTotals,
+    totalCaps,
+    batchesToday,
+    batchesThisMonth,
+    pairedProducts,
+    singleProducts,
+    manufacturerBreakdown,
+    recentBatches,
+    daily,
+    monthlyUnits,
+  ] = await Promise.all([
+    prisma.$queryRaw<{ all_time: bigint; today: bigint; this_month: bigint; flagged: bigint; without_cap: bigint }[]>`
+      SELECT
+        count(*)                                                AS all_time,
+        count(*) FILTER (WHERE b."createdAt" >= ${today})          AS today,
+        count(*) FILTER (WHERE b."createdAt" >= ${thisMonthStart}) AS this_month,
+        count(*) FILTER (WHERE b."status" = 'FLAGGED')             AS flagged,
+        count(*) FILTER (WHERE c."id" IS NULL)                     AS without_cap
+      FROM "Bottle" b
+      LEFT JOIN "Cap" c ON c."bottleId" = b."id"
+    `,
     prisma.cap.count(),
-    prisma.bottle.count({ where: { status: "FLAGGED" } }),
-    prisma.bottle.count({ where: { cap: null } }),
-  ])
-
-  // Batch 3
-  const [batchesToday, batchesThisMonth, pairedProducts] = await Promise.all([
     prisma.batch.count({ where: { createdAt: { gte: today } } }),
     prisma.batch.count({ where: { createdAt: { gte: thisMonthStart } } }),
     prisma.product.count({ where: { authMode: "PAIRED" } }),
+    prisma.product.count({ where: { authMode: "SINGLE" } }),
+    prisma.manufacturer.findMany({
+      where: { onboardingStatus: "ACTIVE_PRODUCTION" },
+      select: {
+        id: true,
+        companyName: true,
+        totalBottlesGenerated: true,
+        subscriptionPlan: true,
+        estimatedBottlesPerMonth: true,
+        _count: { select: { batches: true, bottles: true } },
+      },
+      orderBy: { totalBottlesGenerated: "desc" },
+      take: 10,
+    }),
+    prisma.batch.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        batchCode: true,
+        bottleCount: true,
+        createdAt: true,
+        targetRegion: true,
+        manufacturer: { select: { id: true, companyName: true } },
+        product: { select: { name: true, authMode: true } },
+      },
+    }),
+    prisma.$queryRaw<{ day: string; count: bigint }[]>`
+      SELECT to_char("createdAt" + interval '1 hour', 'YYYY-MM-DD') AS day, count(*) AS count
+      FROM "Bottle"
+      WHERE "createdAt" >= ${days[0].start}
+      GROUP BY 1
+    `,
+    prisma.bottle.groupBy({
+      by: ["manufacturerId"],
+      _count: true,
+      where: { createdAt: { gte: thisMonthStart } },
+    }),
   ])
 
-  // Batch 4
-  const [singleProducts, manufacturerBreakdown, recentBatches] =
-    await Promise.all([
-      prisma.product.count({ where: { authMode: "SINGLE" } }),
-      prisma.manufacturer.findMany({
-        where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-        select: {
-          id: true,
-          companyName: true,
-          totalBottlesGenerated: true,
-          subscriptionPlan: true,
-          estimatedBottlesPerMonth: true,
-          _count: { select: { batches: true, bottles: true } },
-        },
-        orderBy: { totalBottlesGenerated: "desc" },
-        take: 10,
-      }),
-      prisma.batch.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 10,
-        select: {
-          id: true,
-          batchCode: true,
-          bottleCount: true,
-          createdAt: true,
-          targetRegion: true,
-          manufacturer: { select: { id: true, companyName: true } },
-          product: { select: { name: true, authMode: true } },
-        },
-      }),
-    ])
+  const u = unitTotals[0]
+  const totalAllTime = Number(u.all_time)
+  const totalToday = Number(u.today)
+  const totalThisMonth = Number(u.this_month)
+  const flaggedBottles = Number(u.flagged)
+  const bottlesWithoutCaps = Number(u.without_cap)
 
-  // Daily throughput — sequential loop
-  const dailyThroughput: { day: Date; count: number }[] = []
-  for (let i = 0; i < 7; i++) {
-    const day = new Date()
-    day.setDate(day.getDate() - (6 - i))
-    day.setHours(0, 0, 0, 0)
-    const next = new Date(day)
-    next.setDate(next.getDate() + 1)
-    const count = await prisma.bottle.count({
-      where: { createdAt: { gte: day, lt: next } },
-    })
-    dailyThroughput.push({ day, count })
-  }
+  const byDay = new Map(daily.map((r) => [r.day, Number(r.count)]))
+  const dailyThroughput = days.map(({ start, key }) => ({ day: start, count: byDay.get(key) ?? 0 }))
+  const unitsThisMonth = new Map(monthlyUnits.map((r) => [r.manufacturerId, r._count]))
 
   return {
     totalAllTime,
@@ -108,6 +112,7 @@ async function getSerializationMetrics() {
     manufacturerBreakdown,
     recentBatches,
     dailyThroughput,
+    unitsThisMonth,
     pairingIntegrity:
       totalAllTime > 0
         ? (
@@ -127,23 +132,20 @@ export default async function SerializationPage() {
     1
   )
 
-  const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-  const todayIndex = new Date().getDay()
-  const orderedLabels = Array.from(
-    { length: 7 },
-    (_, i) => dayLabels[(todayIndex - 6 + i + 7) % 7]
+  const orderedLabels = metrics.dailyThroughput.map(({ day }) =>
+    day.toLocaleDateString("en-NG", { weekday: "short", timeZone: "Africa/Lagos" })
   )
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-white tracking-tight">
-            Serialization Engine
+            Serialisation
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Identity generation · Cap pairing · Export management
+            Codes generated for every unit, cap pairing and batches across all manufacturers.
           </p>
         </div>
         <Link
@@ -151,7 +153,7 @@ export default async function SerializationPage() {
           className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs hover:bg-blue-500/20 transition-colors"
         >
           <Cpu className="w-3.5 h-3.5" />
-          Production Pairing Monitor
+          Pairing
         </Link>
       </div>
 
@@ -159,7 +161,7 @@ export default async function SerializationPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           {
-            label: "Total Serialized",
+            label: "Units serialised",
             value: metrics.totalAllTime.toLocaleString(),
             sub: "All time",
             icon: Cpu,
@@ -167,7 +169,7 @@ export default async function SerializationPage() {
             border: "border-gray-800/60",
           },
           {
-            label: "Serialized Today",
+            label: "Serialised today",
             value: metrics.totalToday.toLocaleString(),
             sub: `${metrics.batchesToday} batches`,
             icon: TrendingUp,
@@ -408,7 +410,7 @@ export default async function SerializationPage() {
                 "Total Bottles",
                 "Batches",
                 "Est. Monthly",
-                "Plan Usage",
+                "Plan usage this month",
                 "",
               ].map((h) => (
                 <th
@@ -432,14 +434,8 @@ export default async function SerializationPage() {
               </tr>
             ) : (
               metrics.manufacturerBreakdown.map((m) => {
-                const planLimit = PLAN_LIMITS[m.subscriptionPlan]
-                const usagePct =
-                  planLimit === Infinity
-                    ? null
-                    : Math.min(
-                        (m.totalBottlesGenerated / planLimit) * 100,
-                        100
-                      )
+                const usage = describeUsage(m.subscriptionPlan, metrics.unitsThisMonth.get(m.id) ?? 0)
+                const usagePct = usage.unlimited ? null : usage.percent
                 const usageColor =
                   usagePct === null
                     ? "bg-blue-500/40"
@@ -493,7 +489,7 @@ export default async function SerializationPage() {
                               {usagePct.toFixed(1)}%
                             </span>
                             <span className="text-[11px] text-gray-500">
-                              of {planLimit.toLocaleString()}
+                              of {usage.limit.toLocaleString()}
                             </span>
                           </div>
                           <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">

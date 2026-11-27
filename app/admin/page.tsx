@@ -3,6 +3,7 @@ import Link from "next/link"
 import { Bell, Building2, Package, ScanLine, ShieldCheck, ShieldAlert, TrendingUp } from "lucide-react"
 import { requireAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
+import { lastLagosDays, startOfLagosDay } from "@/lib/lagos-time"
 import { PageHeader } from "@/components/ui/page-header"
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
@@ -18,8 +19,7 @@ export const revalidate = 30
 const DAY = 24 * 60 * 60 * 1000
 
 async function getOverview() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = startOfLagosDay()
 
   const [
     scansToday,
@@ -63,28 +63,21 @@ async function getOverview() {
 }
 
 async function getWeek() {
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const day = new Date()
-    day.setDate(day.getDate() - (6 - i))
-    day.setHours(0, 0, 0, 0)
-    const next = new Date(day)
-    next.setDate(next.getDate() + 1)
-    return { day, next }
-  })
-
-  const counts = await Promise.all(
-    days.map(({ day, next }) =>
-      Promise.all([
-        prisma.scanLog.count({ where: { scannedAt: { gte: day, lt: next } } }),
-        prisma.scanLog.count({ where: { scannedAt: { gte: day, lt: next }, fraudFlag: true } }),
-      ])
-    )
-  )
-
-  return days.map(({ day }, i) => ({
-    label: day.toLocaleDateString("en-NG", { weekday: "short" }),
-    total: counts[i][0],
-    flagged: counts[i][1],
+  const days = lastLagosDays(7)
+  // One query for the whole week, grouped by Lagos calendar day
+  const rows = await prisma.$queryRaw<{ day: string; total: bigint; flagged: bigint }[]>`
+    SELECT to_char("scannedAt" + interval '1 hour', 'YYYY-MM-DD') AS day,
+           count(*) AS total,
+           count(*) FILTER (WHERE "fraudFlag" = true) AS flagged
+    FROM "ScanLog"
+    WHERE "scannedAt" >= ${days[0].start}
+    GROUP BY 1
+  `
+  const byDay = new Map(rows.map((r) => [r.day, r]))
+  return days.map(({ start, key }) => ({
+    label: start.toLocaleDateString("en-NG", { weekday: "short", timeZone: "Africa/Lagos" }),
+    total: Number(byDay.get(key)?.total ?? 0),
+    flagged: Number(byDay.get(key)?.flagged ?? 0),
   }))
 }
 

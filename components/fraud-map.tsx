@@ -15,7 +15,7 @@ export function FraudMap({ points }: { points: MapPoint[] }) {
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return
 
-    // Dynamically import leaflet to avoid SSR issues
+    // Leaflet touches window, so load it only in the browser.
     import("leaflet").then((L) => {
       import("leaflet/dist/leaflet.css")
 
@@ -25,7 +25,7 @@ export function FraudMap({ points }: { points: MapPoint[] }) {
       const map = L.map(mapRef.current).setView([9.082, 8.6753], 6)
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors",
+        attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map)
 
       points.forEach((point) => {
@@ -56,8 +56,9 @@ export function FraudMap({ points }: { points: MapPoint[] }) {
   return (
     <div
       ref={mapRef}
-      className="w-full h-80 z-0"
-      style={{ minHeight: "320px" }}
+      className="z-0 h-80 w-full"
+      role="img"
+      aria-label={`Map of ${points.length} scans in Nigeria`}
     />
   )
 }

@@ -1,8 +1,18 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
-import { formatSerialId } from "@/lib/serial"
+import type { Metadata } from "next"
+import { MapPin, ShieldCheck } from "lucide-react"
+import { formatSerialId } from "@/lib/serial-format"
 import { FraudMap } from "@/components/fraud-map"
+import { PageHeader } from "@/components/ui/page-header"
+import { StatCard } from "@/components/ui/stat-card"
+import { Badge } from "@/components/ui/badge"
+import { EmptyState } from "@/components/ui/empty-state"
+import { card, cardHeader, cardTitle } from "@/lib/ui"
+import { formatDate } from "@/lib/format"
+
+export const metadata: Metadata = { title: "Fraud alerts" }
 
 export default async function FraudPage() {
   const session = await auth()
@@ -13,7 +23,7 @@ export default async function FraudPage() {
   })
   if (!manufacturer) redirect("/onboarding")
 
-  const [fraudLogs, flaggedBottleCount, driftLogs, scansByRegion] =
+  const [fraudLogs, fraudLogCount, flaggedBottleCount, driftLogs, scansByRegion] =
     await Promise.all([
       // All fraud scan logs
       prisma.scanLog.findMany({
@@ -22,13 +32,20 @@ export default async function FraudPage() {
           bottle: { batch: { manufacturerId: manufacturer.id } },
         },
         orderBy: { scannedAt: "desc" },
+        take: 100,
         include: {
           bottle: {
             include: {
               batch: { include: { product: true } },
-              scanLogs: { orderBy: { scannedAt: "asc" }, take: 1 },
             },
           },
+        },
+      }),
+
+      prisma.scanLog.count({
+        where: {
+          fraudFlag: true,
+          bottle: { batch: { manufacturerId: manufacturer.id } },
         },
       }),
 
@@ -74,7 +91,7 @@ export default async function FraudPage() {
       }),
     ])
 
-  // Build regional breakdown from Nigerian state coordinates
+  // Regional breakdown from approximate state bounding boxes
   const regionBounds: Record<string, { lat: [number, number]; lng: [number, number] }> = {
     Lagos: { lat: [6.3, 6.7], lng: [3.1, 3.7] },
     Abuja: { lat: [8.8, 9.3], lng: [7.1, 7.6] },
@@ -113,231 +130,146 @@ export default async function FraudPage() {
     }))
 
   return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
-          Fraud Intelligence
-        </h2>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-          Geographic fraud patterns, supply chain drift, and alert history.
-        </p>
+    <div className="space-y-8">
+      <PageHeader
+        title="Fraud alerts"
+        description="Scans that failed a check, where they happened, and batches turning up outside their target state."
+      />
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard label="Flagged units" value={flaggedBottleCount.toLocaleString()} tone={flaggedBottleCount > 0 ? "bad" : "neutral"} />
+        <StatCard label="Flagged scans" value={fraudLogCount.toLocaleString()} tone={fraudLogCount > 0 ? "warn" : "neutral"} />
+        <StatCard label="Out-of-region scans" value={driftLogs.length.toLocaleString()} hint="Latest 20 shown below" />
+        <StatCard label="States with scans" value={regionalData.length} hint="Where location was shared" />
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-xl p-4">
-          <p className="text-xs text-red-600 dark:text-red-400 font-medium uppercase tracking-wide">
-            Flagged Bottles
-          </p>
-          <p className="text-3xl font-bold text-red-700 dark:text-red-300 mt-1">
-            {flaggedBottleCount.toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-          <p className="text-xs text-amber-600 dark:text-amber-400 font-medium uppercase tracking-wide">
-            Fraud Events
-          </p>
-          <p className="text-3xl font-bold text-amber-700 dark:text-amber-300 mt-1">
-            {fraudLogs.length.toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
-          <p className="text-xs text-orange-600 dark:text-orange-400 font-medium uppercase tracking-wide">
-            Drift Alerts
-          </p>
-          <p className="text-3xl font-bold text-orange-700 dark:text-orange-300 mt-1">
-            {driftLogs.length.toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium uppercase tracking-wide">
-            Regions Active
-          </p>
-          <p className="text-3xl font-bold text-blue-700 dark:text-blue-300 mt-1">
-            {regionalData.length}
-          </p>
-        </div>
-      </div>
-
-      {/* Heat map */}
-      {mapPoints.length > 0 ? (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden mb-8">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-              Geographic Scan Map
-            </h3>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-              Green = genuine scan · Red = fraud detected
-            </p>
+      <section className={card}>
+        <div className={cardHeader}>
+          <div>
+            <h2 className={cardTitle}>Scan map</h2>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Only scans where the shopper shared their location.</p>
           </div>
+          <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-green-500" aria-hidden="true" /> Genuine
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500" aria-hidden="true" /> Flagged
+            </span>
+          </div>
+        </div>
+        {mapPoints.length > 0 ? (
           <FraudMap points={mapPoints} />
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center mb-8">
-          <p className="text-gray-400 dark:text-gray-500 text-sm">
-            No location data yet. Scans with shared location will appear here.
-          </p>
-        </div>
-      )}
-
-      {/* Regional breakdown table */}
-      {regionalData.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden mb-8">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-              Regional Breakdown
-            </h3>
-          </div>
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {regionalData.map((row) => (
-              <div
-                key={row.region}
-                className="px-6 py-4 flex items-center gap-4"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {row.region}
-                    </p>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-gray-400 dark:text-gray-500">
-                        {row.total} scans
-                      </span>
-                      {row.fraud > 0 && (
-                        <span className="text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded-full">
-                          {row.fraud} fraud
-                        </span>
-                      )}
-                      <span
-                        className={`text-xs font-bold w-10 text-right ${
-                          row.fraudRate > 20
-                            ? "text-red-600 dark:text-red-400"
-                            : row.fraudRate > 5
-                            ? "text-amber-600 dark:text-amber-400"
-                            : "text-green-600 dark:text-green-400"
-                        }`}
-                      >
-                        {row.fraudRate.toFixed(0)}%
-                      </span>
-                    </div>
-                  </div>
-                  {/* Progress bar */}
-                  <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
-                    <div
-                      className="h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 relative overflow-hidden"
-                      style={{ width: "100%" }}
-                    >
-                      <div
-                        className="absolute left-0 top-0 h-full bg-red-500 rounded-full"
-                        style={{ width: `${Math.min(row.fraudRate, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Supply chain drift alerts */}
-      {driftLogs.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-orange-200 dark:border-orange-800 shadow-sm overflow-hidden mb-8">
-          <div className="px-6 py-4 border-b border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950">
-            <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-200">
-              Supply Chain Drift Alerts
-            </h3>
-            <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
-              Batches scanned outside their intended distribution region
-            </p>
-          </div>
-          <div className="divide-y divide-orange-100 dark:divide-orange-900">
-            {driftLogs.map((log) => (
-              <div key={log.id} className="px-6 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {log.bottle?.batch?.product?.name ?? "Unknown product"}
-                    </p>
-                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                      {log.flagReason}
-                    </p>
-                  </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
-                    {new Date(log.scannedAt).toLocaleDateString("en-NG", {
-                      timeZone: "Africa/Lagos",
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-                {log.lat && log.lng && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 font-mono">
-                    Scanned at {log.lat.toFixed(4)}, {log.lng.toFixed(4)}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Fraud alert history */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-            Fraud Alert History
-          </h3>
-        </div>
-
-        {fraudLogs.length === 0 ? (
-          <div className="p-12 text-center">
-            <p className="text-2xl mb-2">✅</p>
-            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
-              No fraud detected
-            </p>
-            <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">
-              All scans are looking clean.
-            </p>
-          </div>
         ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          <EmptyState
+            icon={MapPin}
+            title="No location data yet"
+            description="Shoppers are asked to share their location when they verify. Scans where they agree will appear on this map."
+          />
+        )}
+      </section>
+
+      {regionalData.length > 0 && (
+        <section className={card}>
+          <div className={cardHeader}>
+            <h2 className={cardTitle}>By state</h2>
+          </div>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {regionalData.map((row) => (
+              <li key={row.region} className="px-5 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{row.region}</p>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">{row.total.toLocaleString()} scans</span>
+                    {row.fraud > 0 && <Badge tone="bad">{row.fraud} flagged</Badge>}
+                    <span
+                      className={`w-12 text-right font-semibold tabular-nums ${
+                        row.fraudRate > 20
+                          ? "text-red-600 dark:text-red-400"
+                          : row.fraudRate > 5
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      {row.fraudRate.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                  <div className="h-full rounded-full bg-red-500" style={{ width: `${Math.min(row.fraudRate, 100)}%` }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {driftLogs.length > 0 && (
+        <section className={card}>
+          <div className={cardHeader}>
+            <div>
+              <h2 className={cardTitle}>Scanned outside the target state</h2>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                Units scanned more than 300 km from where their batch was meant to be sold.
+              </p>
+            </div>
+          </div>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {driftLogs.map((log) => (
+              <li key={log.id} className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {log.bottle?.batch?.product?.name ?? "Unknown product"}
+                  </p>
+                  <p className="mt-0.5 text-sm text-amber-700 dark:text-amber-300">{log.flagReason}</p>
+                  {log.lat != null && log.lng != null && (
+                    <p className="mt-0.5 font-mono text-xs text-gray-500 dark:text-gray-400">
+                      {log.lat.toFixed(4)}, {log.lng.toFixed(4)}
+                    </p>
+                  )}
+                </div>
+                <p className="shrink-0 text-xs text-gray-500 dark:text-gray-400">{formatDate(log.scannedAt)}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className={card}>
+        <div className={cardHeader}>
+          <h2 className={cardTitle}>Flagged scans</h2>
+          {fraudLogCount > fraudLogs.length && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">Latest {fraudLogs.length} of {fraudLogCount.toLocaleString()}</span>
+          )}
+        </div>
+        {fraudLogs.length === 0 ? (
+          <EmptyState
+            icon={ShieldCheck}
+            title="No flagged scans"
+            description="None of your products have failed a check so far."
+          />
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {fraudLogs.map((log) => {
               if (!log.bottle) return null
               return (
-                <div key={log.id} className="px-6 py-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-lg shrink-0">🚨</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {log.bottle.batch.product?.name ?? "No Product"}
-                        </p>
-                        <p className="text-xs font-mono text-gray-400 dark:text-gray-500 mt-0.5">
-                          {formatSerialId(log.bottle.serialId)}
-                        </p>
-                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                          {log.flagReason ?? "Duplicate scan"}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
-                      {new Date(log.scannedAt).toLocaleDateString("en-NG", {
-                        timeZone: "Africa/Lagos",
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                <li key={log.id} className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                      {log.bottle.batch.product?.name ?? "No product"}
                     </p>
+                    <p className="mt-0.5 font-mono text-xs text-gray-500 dark:text-gray-400">
+                      {formatSerialId(log.bottle.serialId)} · {log.scanLayer === "CAP" ? "Cap" : "Label"}
+                    </p>
+                    <p className="mt-1 text-sm text-red-700 dark:text-red-300">{log.flagReason ?? "Repeat scan"}</p>
                   </div>
-                </div>
+                  <p className="shrink-0 text-xs text-gray-500 dark:text-gray-400">{formatDate(log.scannedAt, true)}</p>
+                </li>
               )
             })}
-          </div>
+          </ul>
         )}
-      </div>
+      </section>
     </div>
   )
 }

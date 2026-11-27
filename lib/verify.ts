@@ -63,7 +63,7 @@ export async function verifyBottle(
     return {
       status: "NOT_FOUND",
       message:
-        "This code was not found in our system. The product may be counterfeit.",
+        "We could not find this code in our records. The product may not be genuine.",
     }
   }
 
@@ -71,7 +71,7 @@ export async function verifyBottle(
     return {
       status: "FLAGGED",
       message:
-        "This product has been flagged for fraud. Do not consume.",
+        "This product has been flagged as suspicious. Do not consume it, and keep the pack if you can.",
     }
   }
 
@@ -94,8 +94,7 @@ export async function verifyBottle(
     },
   })
 
-  // ── SINGLE MODE ───────────────────────────────────────────────────────────
-  // No cap required — verify immediately on first scan
+  // Single mode: no cap, so the first scan is the verification.
 
   if (authMode === "SINGLE") {
     // Atomic claim: only one scan can move the unit out of MINT, so two
@@ -109,7 +108,7 @@ export async function verifyBottle(
       return {
         status: "ALREADY_VERIFIED",
         message:
-          "This product has already been scanned and verified previously.",
+          "This code has already been used to verify a product. If you have just opened this pack, it may not be genuine.",
         firstScan: bottle.updatedAt,
         authMode: "SINGLE",
       }
@@ -117,18 +116,18 @@ export async function verifyBottle(
 
     return {
       status: "GENUINE_SINGLE",
-      message: `Genuine ${
+      message: `This ${
         bottle.batch.product?.name ?? "product"
-      }. This unit is verified authentic. Safe to consume.`,
+      } is genuine. This is the first time its code has been checked.`,
       productName: bottle.batch.product?.name ?? "Unknown Product",
       authMode: "SINGLE",
       openedAt: new Date(),
     }
   }
 
-  // ── PAIRED MODE ───────────────────────────────────────────────────────────
+  // Paired mode
 
-  // Cap already opened before bottle scan — possible refill
+  // Cap already opened before the bottle was scanned: possible refill
   if (bottle.cap && bottle.cap.status === "OPENED") {
     await prisma.bottle.update({
       where: { id: bottle.id },
@@ -150,7 +149,7 @@ export async function verifyBottle(
         scanLayer: "BOTTLE",
         fraudFlag: true,
         flagReason:
-          "Cap already opened before bottle QR scanned — possible refill",
+          "Cap opened before the bottle label was scanned (possible refill)",
         channel: meta?.channel ?? null,
         ipHash: meta?.ipHash ?? null,
         userAgent: meta?.userAgent ?? null,
@@ -159,7 +158,8 @@ export async function verifyBottle(
 
     return {
       status: "CAP_ALREADY_OPENED",
-      message: `The hidden cap inside this bottle was already opened. This bottle may have been refilled. Do not consume.`,
+      message:
+        "The code inside this bottle's cap has already been scanned, so it has been opened before. It may have been refilled. Do not consume it.",
       capOpenedAt: bottle.cap.openedAt ?? new Date(),
       authMode: "PAIRED",
     }
@@ -170,7 +170,7 @@ export async function verifyBottle(
     return {
       status: "FLAGGED",
       message:
-        "The cap associated with this bottle has been flagged for fraud. Do not consume.",
+        "The cap on this bottle has been flagged as suspicious. Do not consume it.",
     }
   }
 
@@ -179,27 +179,27 @@ export async function verifyBottle(
     return {
       status: "ALREADY_VERIFIED",
       message:
-        "This bottle has already been opened and fully verified.",
+        "This bottle has already been opened and checked. If you bought it sealed, it may not be genuine.",
       firstScan: bottle.updatedAt,
       authMode: "PAIRED",
     }
   }
 
-  // Unpaired bottle — cap not yet assigned on production line
-if (!bottle.cap && bottle.batch.generationMode === "UNPAIRED") {
-  return {
-    status: "FLAGGED",
-    message:
-      "This bottle has not yet been paired with a cap on the production line. If you purchased this product sealed please contact the manufacturer.",
+  // Unpaired bottle: no cap assigned on the production line yet
+  if (!bottle.cap && bottle.batch.generationMode === "UNPAIRED") {
+    return {
+      status: "FLAGGED",
+      message:
+      "This bottle has not been linked to a cap at the factory yet, so it cannot be fully checked. If you bought it sealed, contact the manufacturer.",
+    }
   }
-}
 
-  // Normal paired flow — prompt cap scan
+  // Normal paired flow: ask for the cap scan
   return {
     status: "PROMPT_CAP",
-    message: `Bottle identity confirmed for ${
-      bottle.batch.product?.name ?? "Unknown Product"
-    }. Now open the bottle and scan the hidden QR code inside the cap to complete verification.`,
+    message: `Bottle found: ${
+      bottle.batch.product?.name ?? "Unknown product"
+    }. Open it and scan the code inside the cap to finish the check.`,
     productName: bottle.batch.product?.name ?? "Unknown Product",
     topCode: bottle.cap?.topCode ?? "",
     authMode: "PAIRED",

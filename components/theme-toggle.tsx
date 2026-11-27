@@ -1,40 +1,50 @@
 "use client"
 
+import { useSyncExternalStore } from "react"
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { Monitor, Moon, Sun } from "lucide-react"
 
-export function ThemeToggle() {
-  const { theme, setTheme, resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
+const OPTIONS = [
+  { value: "light", label: "Light theme", icon: Sun },
+  { value: "system", label: "Match device theme", icon: Monitor },
+  { value: "dark", label: "Dark theme", icon: Moon },
+] as const
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+const subscribe = () => () => {}
 
-  if (!mounted) return (
-    <div className="h-8 w-28 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
-  )
+export function ThemeToggle({ className = "" }: { className?: string }) {
+  const { theme, setTheme } = useTheme()
+  // The stored theme is only known in the browser, so render a neutral
+  // placeholder on the server to avoid a hydration mismatch.
+  const mounted = useSyncExternalStore(subscribe, () => true, () => false)
 
   return (
-    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-0.5">
-      {[
-        { value: "light", icon: "☀️" },
-        { value: "system", icon: "💻" },
-        { value: "dark", icon: "🌙" },
-      ].map((option) => (
-        <button
-          key={option.value}
-          onClick={() => setTheme(option.value)}
-          title={option.value}
-          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
-            theme === option.value
-              ? "bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-white"
-              : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          }`}
-        >
-          {option.icon}
-        </button>
-      ))}
+    <div
+      role="radiogroup"
+      aria-label="Colour theme"
+      className={`inline-flex items-center gap-0.5 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800 ${className}`}
+    >
+      {OPTIONS.map(({ value, label, icon: Icon }) => {
+        const active = mounted && theme === value
+        return (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={label}
+            title={label}
+            onClick={() => setTheme(value)}
+            className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+              active
+                ? "bg-white text-gray-900 shadow-xs dark:bg-gray-700 dark:text-white"
+                : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )
+      })}
     </div>
   )
 }

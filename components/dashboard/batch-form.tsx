@@ -2,6 +2,9 @@
 
 import { useState } from "react"
 import { generateBatch } from "@/lib/actions/batches"
+import { NIGERIAN_STATES } from "@/lib/nigeria"
+import { SubmitButton } from "@/components/ui/submit-button"
+import { buttonPrimary, fieldHint, fieldLabel, inputBase } from "@/lib/ui"
 
 type Product = {
   id: string
@@ -9,165 +12,145 @@ type Product = {
   authMode: string
 }
 
-const NIGERIAN_STATES = [
-  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa",
-  "Benue", "Borno", "Cross River", "Delta", "Ebonyi", "Edo",
-  "Ekiti", "Enugu", "FCT — Abuja", "Gombe", "Imo", "Jigawa",
-  "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara",
-  "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun",
-  "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
-]
-
-export function BatchForm({ products }: { products: Product[] }) {
+export function BatchForm({
+  products,
+  blocked = false,
+  remaining = null,
+}: {
+  products: Product[]
+  // True once this month's plan allowance is used up
+  blocked?: boolean
+  // Units left this month, passed only when the account is close to its limit
+  remaining?: number | null
+}) {
   const [selectedProductId, setSelectedProductId] = useState("")
-
   const selectedProduct = products.find((p) => p.id === selectedProductId)
   const isPaired = selectedProduct?.authMode === "PAIRED"
-  const isSingle = selectedProduct?.authMode === "SINGLE"
 
   return (
-    <form action={generateBatch} className="flex flex-col gap-4">
-      {/* Product selector */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+    <form action={generateBatch} className="space-y-5">
+      <fieldset disabled={blocked} className="space-y-5 disabled:opacity-60">
+      <div className="space-y-1.5">
+        <label htmlFor="productId" className={fieldLabel}>
           Product
         </label>
         <select
+          id="productId"
           name="productId"
           required
           value={selectedProductId}
           onChange={(e) => setSelectedProductId(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
+          className={inputBase}
         >
-          <option value="">Select a product</option>
+          <option value="">Choose a product</option>
           {products.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name} — {p.authMode === "PAIRED" ? "Paired Auth" : "Single Auth"}
+              {p.name} ({p.authMode === "PAIRED" ? "label and cap" : "single code"})
             </option>
           ))}
         </select>
       </div>
 
-      {/* Quantity */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Quantity
-          <span className="text-gray-400 font-normal ml-1">(max 5,000)</span>
+      <div className="space-y-1.5">
+        <label htmlFor="quantity" className={fieldLabel}>
+          Number of units
         </label>
         <input
+          id="quantity"
           name="quantity"
           type="number"
+          inputMode="numeric"
           required
           min={1}
           max={5000}
           placeholder="e.g. 500"
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
+          aria-describedby="quantity-hint"
+          className={inputBase}
         />
+        <p id="quantity-hint" className={fieldHint}>
+          Up to 5,000 per batch. Each unit gets its own code.
+          {remaining !== null && ` ${remaining.toLocaleString()} units left in this month's allowance.`}
+        </p>
       </div>
 
-      {/* Generation mode — only show for PAIRED products */}
-      {isPaired && (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Generation Mode
-          </label>
-          <select
-            name="generationMode"
-            defaultValue="PRE_PAIRED"
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
-          >
-            <option value="PRE_PAIRED">
-              Pre-Paired — Bottle and cap linked at generation
-            </option>
-            <option value="UNPAIRED">
-              Unpaired — Bottle and cap printed separately, paired on line
-            </option>
-          </select>
-          <div className="grid grid-cols-2 gap-2 mt-1">
-            <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
-              <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Pre-Paired
-              </p>
-              <p className="text-[10px] text-gray-500 leading-relaxed">
-                Each bottle QR is matched to a specific cap QR at
-                generation. Best for integrated printing setups.
-              </p>
-            </div>
-            <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
-              <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Unpaired
-              </p>
-              <p className="text-[10px] text-gray-500 leading-relaxed">
-                Bottle and cap QRs generated independently. Pairing
-                recorded on the production line via scanner or manual
-                submit.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Single mode info — shown when single product selected */}
-      {isSingle && (
-        <div className="p-3 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 rounded-lg">
-          <p className="text-[11px] font-medium text-green-700 dark:text-green-400 mb-1">
-            Single QR Mode
-          </p>
-          <p className="text-[10px] text-green-600 dark:text-green-400/70 leading-relaxed">
-            One QR code per unit. Consumer scans once for immediate
-            verification. No cap required.
-          </p>
-          <input type="hidden" name="generationMode" value="PRE_PAIRED" />
-        </div>
-      )}
-
-      {/* No product selected placeholder */}
-      {!selectedProduct && (
+      {isPaired ? (
+        <fieldset className="space-y-2">
+          <legend className={fieldLabel}>How caps are matched to bottles</legend>
+          {[
+            {
+              value: "PRE_PAIRED",
+              title: "Matched now",
+              body: "Each bottle code is linked to its cap code when the batch is created. Best when labels and caps are printed together.",
+            },
+            {
+              value: "UNPAIRED",
+              title: "Matched on the production line",
+              body: "Bottle and cap codes are printed separately and linked later by a line scanner or by hand.",
+            },
+          ].map((opt) => (
+            <label
+              key={opt.value}
+              className="flex cursor-pointer gap-3 rounded-lg border border-gray-300 p-3.5 transition-colors has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/60 dark:border-gray-700 dark:has-[:checked]:border-brand-400 dark:has-[:checked]:bg-brand-500/10"
+            >
+              <input
+                type="radio"
+                name="generationMode"
+                value={opt.value}
+                defaultChecked={opt.value === "PRE_PAIRED"}
+                className="mt-0.5 h-4 w-4 accent-brand-600"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900 dark:text-white">{opt.title}</span>
+                <span className="mt-0.5 block text-sm text-gray-600 dark:text-gray-400">{opt.body}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      ) : (
         <input type="hidden" name="generationMode" value="PRE_PAIRED" />
       )}
 
-      {/* Target region */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Target Region
-          <span className="text-gray-400 font-normal ml-1">
-            (for drift detection)
-          </span>
+      {selectedProduct && !isPaired && (
+        <p className="rounded-lg bg-gray-50 px-3.5 py-3 text-sm text-gray-600 dark:bg-gray-800/60 dark:text-gray-300">
+          This product uses one code per unit. Shoppers scan once and no cap code is needed.
+        </p>
+      )}
+
+      <div className="space-y-1.5">
+        <label htmlFor="targetRegion" className={fieldLabel}>
+          Target state <span className="font-normal text-gray-500 dark:text-gray-400">(optional)</span>
         </label>
-        <select
-          name="targetRegion"
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500"
-        >
-          <option value="">Select region (optional)</option>
+        <select id="targetRegion" name="targetRegion" aria-describedby="targetRegion-hint" className={inputBase} defaultValue="">
+          <option value="">Not specified</option>
           {NIGERIAN_STATES.map((s) => (
-            <option key={s} value={s}>
-              {s}
+            <option key={s.value} value={s.value}>
+              {s.label}
             </option>
           ))}
         </select>
+        <p id="targetRegion-hint" className={fieldHint}>
+          Where this batch is meant to be sold. Scans far from it are flagged as possible diversion.
+        </p>
       </div>
 
-      {/* Notes */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Notes
-          <span className="text-gray-400 font-normal ml-1">(optional)</span>
+      <div className="space-y-1.5">
+        <label htmlFor="notes" className={fieldLabel}>
+          Notes <span className="font-normal text-gray-500 dark:text-gray-400">(optional)</span>
         </label>
         <textarea
+          id="notes"
           name="notes"
           rows={2}
-          placeholder="Production run notes..."
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 dark:focus:border-gray-500 resize-none"
+          maxLength={500}
+          placeholder="e.g. Line 2, morning shift"
+          className={`${inputBase} resize-y`}
         />
       </div>
 
-      <button
-        type="submit"
-        disabled={!selectedProductId}
-        className="w-full rounded-lg bg-gray-900 dark:bg-white px-4 py-2.5 text-sm font-semibold text-white dark:text-gray-900 shadow-sm transition hover:bg-gray-700 dark:hover:bg-gray-100 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        Generate Batch
-      </button>
+      <SubmitButton className={`${buttonPrimary} w-full`} disabled={blocked || !selectedProductId} pendingLabel="Generating codes">
+        Generate batch
+      </SubmitButton>
+      </fieldset>
     </form>
   )
 }

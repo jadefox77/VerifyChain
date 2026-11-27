@@ -1,9 +1,14 @@
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { redirect } from "next/navigation"
-import { OnboardingForm } from "@/components/onboarding/onboarding-form"
-import { Shield } from "lucide-react"
 import { handleSignOut } from "@/lib/actions/auth"
+import { OnboardingForm } from "@/components/onboarding/onboarding-form"
+import { AuthShell } from "@/components/ui/auth-shell"
+
+export const metadata: Metadata = {
+  title: "Register your company",
+}
 
 export default async function OnboardingPage() {
   const session = await auth()
@@ -11,47 +16,36 @@ export default async function OnboardingPage() {
 
   const existing = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },
+    select: { id: true },
   })
-
   if (existing) redirect("/dashboard")
 
   return (
-    <main className="min-h-screen bg-gray-950 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
-            <Shield className="w-5 h-5 text-blue-400" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">
-            Register Your Company
-          </h1>
-          <p className="text-gray-500 text-sm mt-2">
-            Complete all steps to apply for VerifyChain Africa access.
-            Your application will be reviewed before activation.
-          </p>
-          <div className="mt-3 flex items-center justify-center gap-2">
-            <p className="text-xs text-gray-600">
-              Signed in as{" "}
-              <span className="text-gray-500">{session.user.email}</span>
-            </p>
-            <span className="text-gray-700">·</span>
-            <form action={handleSignOut}>
-              <button
-                type="submit"
-                className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-
-        <OnboardingForm
-          userEmail={session.user.email ?? ""}
-          userName={session.user.name ?? ""}
-        />
+    <AuthShell
+      width="lg"
+      footer={
+        <span className="inline-flex flex-wrap items-center justify-center gap-x-2">
+          <span>Signed in as {session.user.email}</span>
+          <span aria-hidden="true">·</span>
+          <form action={handleSignOut} className="inline">
+            <button type="submit" className="underline underline-offset-2 hover:text-gray-700 dark:hover:text-gray-200">
+              Sign out
+            </button>
+          </form>
+        </span>
+      }
+    >
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
+          Register your company
+        </h1>
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          This takes about five minutes. We review every application before a
+          manufacturer can issue codes, and you can save time by having your RC
+          number and NAFDAC registrations to hand.
+        </p>
       </div>
-    </main>
+      <OnboardingForm userEmail={session.user.email ?? ""} userName={session.user.name ?? ""} />
+    </AuthShell>
   )
 }

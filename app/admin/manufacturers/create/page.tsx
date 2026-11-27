@@ -1,298 +1,299 @@
-import { requireSuperAdmin } from "@/lib/admin-auth"
-import { prisma } from "@/lib/prisma"
+import type { Metadata } from "next"
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
+import { ArrowLeft, KeyRound } from "lucide-react"
+import type { OnboardingStatus, SubscriptionPlan } from "@prisma/client"
+import { requireSuperAdmin } from "@/lib/admin-auth"
+import { prisma } from "@/lib/prisma"
+import { PageHeader } from "@/components/ui/page-header"
+import { Notice } from "@/components/ui/auth-shell"
+import { SubmitButton } from "@/components/ui/submit-button"
+import { INDUSTRY_TYPES } from "@/lib/nigeria"
+import { buttonPrimary, buttonSecondary, card, fieldHint, fieldLabel, inputBase } from "@/lib/ui"
+
+export const metadata: Metadata = { title: "Create manufacturer account" }
+
+// The one-time credentials are handed from the server action to the page in a
+// short-lived httpOnly cookie, so the temporary password never appears in the
+// URL, browser history or server logs.
+const CREDENTIALS_COOKIE = "vc_new_mfr"
+const COOKIE_PATH = "/admin/manufacturers/create"
+
+const STATUSES: { value: OnboardingStatus; label: string }[] = [
+  { value: "PENDING_REVIEW", label: "Pending review" },
+  { value: "COMPLIANCE_VERIFICATION", label: "Compliance checks" },
+  { value: "TECHNICAL_INTEGRATION", label: "Technical setup" },
+  { value: "PILOT_APPROVAL", label: "Pilot batch" },
+  { value: "ACTIVE_PRODUCTION", label: "Live" },
+]
+
+const PLANS: { value: SubscriptionPlan; label: string }[] = [
+  { value: "FREE", label: "Free" },
+  { value: "STARTER", label: "Starter" },
+  { value: "PROFESSIONAL", label: "Professional" },
+  { value: "ENTERPRISE", label: "Enterprise" },
+]
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ""
+
+async function readCredentials(): Promise<{ email: string; password: string } | null> {
+  const raw = (await cookies()).get(CREDENTIALS_COOKIE)?.value
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (typeof parsed?.email === "string" && typeof parsed?.password === "string") return parsed
+  } catch {
+    // Ignore a malformed cookie
+  }
+  return null
+}
 
 export default async function CreateManufacturerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ created?: string; password?: string; email?: string }>
+  searchParams: Promise<{ created?: string; error?: string }>
 }) {
   await requireSuperAdmin()
   const params = await searchParams
+  const credentials = params.created === "true" ? await readCredentials() : null
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6 lg:p-8">
       <Link
         href="/admin/manufacturers"
-        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 font-mono mb-6 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-gray-200"
       >
-        <ArrowLeft className="w-3 h-3" />
-        Back to Manufacturers
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Manufacturers
       </Link>
 
-      <h1 className="text-lg font-bold text-white mb-1">
-        Create Manufacturer Account
-      </h1>
-      <p className="text-xs text-gray-500 font-mono mb-6">
-        For manufacturers onboarded via field sales or office visits.
-        Credentials will be displayed once for you to share with them.
-      </p>
+      <PageHeader
+        title="Create manufacturer account"
+        description="For companies signed up in person or by the sales team. You will see a temporary password once, to pass on to them."
+      />
 
-      {/* Success state — show credentials */}
-      {params.created === "true" && params.password && params.email && (
-        <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-xl p-5 space-y-4">
-          <h2 className="text-sm font-bold text-green-400">
-            ✓ Account Created Successfully
-          </h2>
-          <p className="text-xs text-green-400/70">
-            Share these credentials with the manufacturer. This is the
-            only time the temporary password will be shown.
-          </p>
-          <div className="space-y-2 p-3 bg-gray-900/60 rounded-lg border border-gray-800">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-gray-500">
-                Email
-              </span>
-              <span className="text-sm font-mono text-white">
-                {params.email}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-gray-500">
-                Temporary Password
-              </span>
-              <span className="text-sm font-mono text-yellow-400 font-bold">
-                {params.password}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-gray-500">
-                Login URL
-              </span>
-              <span className="text-sm font-mono text-blue-400">
-                {process.env.NEXT_PUBLIC_APP_URL}/login
-              </span>
-            </div>
-          </div>
-          <p className="text-[10px] text-gray-600 font-mono">
-            The manufacturer will be required to set a new password on
-            first login. This page will not show these credentials again.
-          </p>
-          <Link
-            href="/admin/manufacturers"
-            className="inline-block px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-xs font-mono hover:bg-gray-700 transition-colors"
-          >
-            View all manufacturers
-          </Link>
-        </div>
+      {params.created === "true" && !credentials && (
+        <Notice tone="info">
+          The account was created. For security, the temporary password is no longer shown. If it was not passed on,
+          contact the development team to reset it.
+        </Notice>
       )}
 
-      {/* Creation form */}
-      <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-5">
-        <form action={createManufacturerAccount} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                Company Name *
-              </label>
-              <input
-                name="companyName"
-                required
-                placeholder="e.g. Kano Beverages Ltd"
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                RC Number
-              </label>
-              <input
-                name="rcNumber"
-                placeholder="e.g. RC-1234567"
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-              />
-            </div>
+      {credentials && (
+        <section className="space-y-4 rounded-xl border border-brand-500/30 bg-brand-500/10 p-5">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5 text-brand-400" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-brand-200">Account created</h2>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                Contact Name *
-              </label>
-              <input
-                name="contactName"
-                required
-                placeholder="Primary contact full name"
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-              />
+          <p className="text-sm text-brand-100/80">
+            Share these details with the manufacturer securely. The temporary password is shown only here and disappears
+            within two minutes.
+          </p>
+          <dl className="divide-y divide-gray-800 rounded-lg border border-gray-800 bg-gray-950/60 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+              <dt className="text-gray-400">Email</dt>
+              <dd className="break-all text-white">{credentials.email}</dd>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                Phone
-              </label>
-              <input
-                name="phone"
-                type="tel"
-                placeholder="+234 800 000 0000"
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-              />
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+              <dt className="text-gray-400">Temporary password</dt>
+              <dd className="font-mono font-semibold tracking-wider text-amber-300">{credentials.password}</dd>
             </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-              Login Email Address *
-            </label>
-            <input
-              name="email"
-              type="email"
-              required
-              placeholder="manufacturer@company.com"
-              className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-            />
-            <p className="text-[10px] text-gray-600">
-              This will be the manufacturer's login email. Must be unique.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                Industry
-              </label>
-              <select
-                name="industryType"
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-gray-600"
-              >
-                <option value="">Select industry</option>
-                <option value="Beverage — Beer">Beer</option>
-                <option value="Beverage — Soft Drink">Soft Drink</option>
-                <option value="Beverage — Water">Water</option>
-                <option value="Beverage — Energy Drink">Energy Drink</option>
-                <option value="Spirits & Alcoholic Beverages">Spirits</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                Subscription Plan
-              </label>
-              <select
-                name="subscriptionPlan"
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-gray-600"
-              >
-                <option value="FREE">Free</option>
-                <option value="STARTER">Starter</option>
-                <option value="PROFESSIONAL">Professional</option>
-                <option value="ENTERPRISE">Enterprise</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-              NAFDAC Numbers
-            </label>
-            <input
-              name="nafdacNumbers"
-              placeholder="e.g. NAFDAC/FD/2024/001"
-              className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-              Initial Onboarding Status
-            </label>
-            <select
-              name="onboardingStatus"
-              className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-gray-600"
-            >
-              <option value="PENDING_REVIEW">Pending Review</option>
-              <option value="COMPLIANCE_VERIFICATION">Compliance Verification</option>
-              <option value="TECHNICAL_INTEGRATION">Technical Integration</option>
-              <option value="PILOT_APPROVAL">Pilot Approval</option>
-              <option value="ACTIVE_PRODUCTION">Active Production</option>
-            </select>
-            <p className="text-[10px] text-gray-600">
-              Set to Active Production if the manufacturer is already
-              fully verified offline.
-            </p>
-          </div>
-
-          <div className="pt-2 border-t border-gray-800/60">
-            <div className="flex items-start gap-2 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg mb-4">
-              <p className="text-xs text-yellow-400">
-                A temporary password will be auto-generated and displayed
-                after submission. The manufacturer must change it on first
-                login.
-              </p>
-            </div>
-            <button
-              type="submit"
-              className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-mono hover:bg-blue-500 transition-colors"
-            >
-              Create Account & Generate Credentials
+            {APP_URL && (
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <dt className="text-gray-400">Sign-in page</dt>
+                <dd className="break-all text-gray-200">{APP_URL}/login</dd>
+              </div>
+            )}
+          </dl>
+          <p className="text-sm text-gray-400">They will be asked to choose a new password the first time they sign in.</p>
+          <form action={clearCredentials} className="flex flex-wrap gap-3">
+            <button type="submit" className={buttonPrimary}>
+              I have saved these details
             </button>
+            <Link href="/admin/manufacturers" className={buttonSecondary}>
+              View manufacturers
+            </Link>
+          </form>
+        </section>
+      )}
+
+      {params.error === "email_exists" && (
+        <Notice tone="error">An account with that email address already exists. Use a different email.</Notice>
+      )}
+      {params.error === "missing" && (
+        <Notice tone="error">Company name, contact name and email are required.</Notice>
+      )}
+
+      <form action={createManufacturerAccount} className={`${card} space-y-5 p-5`}>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label htmlFor="companyName" className={fieldLabel}>
+              Company name
+            </label>
+            <input id="companyName" name="companyName" required maxLength={200} placeholder="e.g. Kano Beverages Ltd" className={inputBase} />
           </div>
-        </form>
-      </div>
+          <div className="space-y-1.5">
+            <label htmlFor="rcNumber" className={fieldLabel}>
+              RC number <span className="font-normal text-gray-500">(optional)</span>
+            </label>
+            <input id="rcNumber" name="rcNumber" maxLength={40} placeholder="e.g. RC-1234567" className={inputBase} />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="contactName" className={fieldLabel}>
+              Contact name
+            </label>
+            <input id="contactName" name="contactName" required maxLength={120} autoComplete="off" className={inputBase} />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="phone" className={fieldLabel}>
+              Phone <span className="font-normal text-gray-500">(optional)</span>
+            </label>
+            <input id="phone" name="phone" type="tel" maxLength={30} placeholder="+234 800 000 0000" className={inputBase} />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="email" className={fieldLabel}>
+            Sign-in email
+          </label>
+          <input id="email" name="email" type="email" required maxLength={254} autoComplete="off" placeholder="name@company.com" className={inputBase} />
+          <p className={fieldHint}>The manufacturer signs in with this address. It must not belong to another account.</p>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label htmlFor="industryType" className={fieldLabel}>
+              Industry
+            </label>
+            <select id="industryType" name="industryType" defaultValue="" className={inputBase}>
+              <option value="">Not specified</option>
+              {INDUSTRY_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="subscriptionPlan" className={fieldLabel}>
+              Plan
+            </label>
+            <select id="subscriptionPlan" name="subscriptionPlan" defaultValue="FREE" className={inputBase}>
+              {PLANS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="nafdacNumbers" className={fieldLabel}>
+            NAFDAC numbers <span className="font-normal text-gray-500">(optional)</span>
+          </label>
+          <input id="nafdacNumbers" name="nafdacNumbers" maxLength={500} placeholder="e.g. A1-1234, A1-5678" className={inputBase} />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="onboardingStatus" className={fieldLabel}>
+            Starting stage
+          </label>
+          <select id="onboardingStatus" name="onboardingStatus" defaultValue="PENDING_REVIEW" className={inputBase}>
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <p className={fieldHint}>Choose Live only if the company has already been checked offline.</p>
+        </div>
+
+        <div className="border-t border-gray-800 pt-5">
+          <SubmitButton className={`${buttonPrimary} w-full`} pendingLabel="Creating account">
+            Create account
+          </SubmitButton>
+        </div>
+      </form>
     </div>
   )
+}
+
+async function clearCredentials() {
+  "use server"
+  await requireSuperAdmin()
+  ;(await cookies()).delete({ name: CREDENTIALS_COOKIE, path: COOKIE_PATH })
+  redirect("/admin/manufacturers")
 }
 
 async function createManufacturerAccount(formData: FormData) {
   "use server"
 
-  const companyName = formData.get("companyName") as string
-  const rcNumber = formData.get("rcNumber") as string
-  const contactName = formData.get("contactName") as string
-  const phone = formData.get("phone") as string
-  const email = formData.get("email") as string
-  const industryType = formData.get("industryType") as string
-  const nafdacNumbers = formData.get("nafdacNumbers") as string
-  const subscriptionPlan = formData.get("subscriptionPlan") as string
-  const onboardingStatus = formData.get("onboardingStatus") as string
+  // Server actions are reachable by direct POST, so the role check has to be
+  // repeated here, not only on the page.
+  await requireSuperAdmin()
 
-  if (!companyName || !email || !contactName) return
+  const text = (key: string, max: number) => String(formData.get(key) ?? "").trim().slice(0, max)
 
-  // Check email not already in use
-  const existing = await prisma.user.findUnique({
-    where: { email },
+  const companyName = text("companyName", 200)
+  const rcNumber = text("rcNumber", 40)
+  const contactName = text("contactName", 120)
+  const phone = text("phone", 30)
+  const email = text("email", 254)
+  const industryType = text("industryType", 100)
+  const nafdacNumbers = text("nafdacNumbers", 500)
+  const planInput = text("subscriptionPlan", 20)
+  const statusInput = text("onboardingStatus", 40)
+
+  if (!companyName || !email || !contactName) redirect(`${COOKIE_PATH}?error=missing`)
+
+  const subscriptionPlan = PLANS.find((p) => p.value === planInput)?.value ?? "FREE"
+  const onboardingStatus = STATUSES.find((s) => s.value === statusInput)?.value ?? "PENDING_REVIEW"
+
+  const existing = await prisma.user.findUnique({ where: { email } })
+  if (existing) redirect(`${COOKIE_PATH}?error=email_exists`)
+
+  // XXXX-XXXX, easy to read out over the phone
+  const raw = crypto.randomBytes(4).toString("hex").toUpperCase()
+  const tempPassword = `${raw.slice(0, 4)}-${raw.slice(4)}`
+  const hashed = await bcrypt.hash(tempPassword, 12)
+
+  // Create both records together so a failure cannot leave a user without a company.
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email,
+        name: contactName,
+        role: "MANUFACTURER_ADMIN",
+        password: hashed,
+        mustResetPassword: true,
+      },
+    })
+    await tx.manufacturer.create({
+      data: {
+        userId: user.id,
+        companyName,
+        rcNumber: rcNumber || null,
+        primaryContact: contactName,
+        phone: phone || null,
+        industryType: industryType || null,
+        nafdacNumbers: nafdacNumbers || null,
+        onboardingStatus,
+        subscriptionPlan,
+      },
+    })
   })
-  if (existing) {
-    redirect("/admin/manufacturers/create?error=email_exists")
-  }
 
-  // Generate temporary password
-  const tempPassword = crypto.randomBytes(4).toString("hex").toUpperCase()
-  // Format: XXXX-XXXX for readability
-  const formattedTemp = `${tempPassword.slice(0, 4)}-${tempPassword.slice(4)}`
-  const hashed = await bcrypt.hash(formattedTemp, 12)
-
-  // Create user
-  const user = await prisma.user.create({
-    data: {
-      email,
-      name: contactName,
-      role: "MANUFACTURER_ADMIN",
-      password: hashed,
-      mustResetPassword: true,
-    },
+  ;(await cookies()).set(CREDENTIALS_COOKIE, JSON.stringify({ email, password: tempPassword }), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: COOKIE_PATH,
+    maxAge: 120,
   })
 
-  // Create manufacturer record
-  await prisma.manufacturer.create({
-    data: {
-      userId: user.id,
-      companyName,
-      rcNumber: rcNumber || null,
-      primaryContact: contactName,
-      phone: phone || null,
-      industryType: industryType || null,
-      nafdacNumbers: nafdacNumbers || null,
-      onboardingStatus: onboardingStatus as any,
-      subscriptionPlan: subscriptionPlan as any,
-    },
-  })
-
-  // Redirect showing credentials in URL params
-  // In production replace with proper session flash or server-side storage
-  redirect(
-    `/admin/manufacturers/create?created=true&email=${encodeURIComponent(email)}&password=${encodeURIComponent(formattedTemp)}`
-  )
+  redirect(`${COOKIE_PATH}?created=true`)
 }

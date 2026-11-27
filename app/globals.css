@@ -2,6 +2,74 @@
 
 @variant dark (&:where(.dark, .dark *));
 
-body {
-  transition: background-color 0.15s ease, color 0.15s ease;
+/*
+  VerifyChain design tokens.
+  Brand green is used for primary actions and genuine results. Neutrals use
+  the Tailwind gray scale. Status colours stay semantic: green for genuine,
+  amber for warnings, red for counterfeit or flagged.
+*/
+@theme inline {
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@theme {
+  --color-brand-50: #ecfdf4;
+  --color-brand-100: #d1fae4;
+  --color-brand-200: #a6f2cc;
+  --color-brand-300: #6de3ad;
+  --color-brand-400: #34cb89;
+  --color-brand-500: #12b06f;
+  --color-brand-600: #078f5a;
+  --color-brand-700: #08724b;
+  --color-brand-800: #0b5a3d;
+  --color-brand-900: #0b4a34;
+  --color-brand-950: #032a1d;
+
+  --color-ink: #0b1411;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "ss02";
+  }
+
+  ::selection {
+    background-color: var(--color-brand-200);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Long tables scroll inside their card instead of stretching the page. */
+@utility table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

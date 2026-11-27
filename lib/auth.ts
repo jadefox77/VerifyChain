@@ -6,6 +6,13 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import type { UserRole } from "@prisma/client"
 
+// Shape returned by the credentials provider's authorize() below.
+type AuthorizedUser = {
+  role: UserRole
+  mustResetPassword: boolean
+  manufacturerId: string | null
+}
+
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error("NEXTAUTH_SECRET is not set")
 }
@@ -14,7 +21,7 @@ if (process.env.NODE_ENV === "production" && !process.env.NEXTAUTH_URL) {
   throw new Error("NEXTAUTH_URL is not set in production")
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   adapter: PrismaAdapter(prisma),
 
   providers: [
@@ -48,6 +55,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
   if (!user || !user.password) return null
 
+
   const passwordMatch = await bcrypt.compare(
     credentials.password as string,
     user.password
@@ -73,7 +81,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     maxAge: 8 * 60 * 60,
   },
 
-  // ── Secure cookie config ────────────────────────────────────────────────
   cookies: {
     sessionToken: {
       name:
@@ -98,7 +105,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           "FRAUD_ANALYST",
           "REGULATORY_OBSERVER",
           "SUPPORT",
-        ].includes((user as any).role)
+        ].includes((user as AuthorizedUser).role)
 
         token.exp =
           Math.floor(Date.now() / 1000) +
@@ -129,9 +136,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Fresh sign-in via credentials
       if (user && account?.provider === "credentials") {
         token.id = user.id ?? ""
-        token.role = (user as any).role
-        token.mustResetPassword = (user as any).mustResetPassword
-        token.manufacturerId = (user as any).manufacturerId ?? null
+        const u = user as AuthorizedUser
+        token.role = u.role
+        token.mustResetPassword = u.mustResetPassword
+        token.manufacturerId = u.manufacturerId ?? null
       }
 
       // Force refresh
@@ -166,7 +174,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return session
     },
 
-    async signIn({ user, account }) {
+    async signIn({ user }) {
       if (!user?.email) return false
       return true
     },
@@ -178,7 +186,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
 })
 
-// ── Role permission maps ──────────────────────────────────────────────────────
+// Role permission maps
 
 export const ADMIN_ROLES: UserRole[] = [
   "SUPER_ADMIN",

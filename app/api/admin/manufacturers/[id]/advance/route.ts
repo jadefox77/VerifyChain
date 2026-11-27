@@ -1,9 +1,9 @@
 import { getAdminSession, canWrite } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
-import { redirect } from "next/navigation"
 import { NextRequest } from "next/server"
+import type { OnboardingStatus } from "@prisma/client"
 
-const STAGES = [
+const STAGES: OnboardingStatus[] = [
   "PENDING_REVIEW",
   "COMPLIANCE_VERIFICATION",
   "TECHNICAL_INTEGRATION",
@@ -40,7 +40,7 @@ export async function POST(
 
   await prisma.manufacturer.update({
     where: { id },
-    data: { onboardingStatus: nextStatus as any },
+    data: { onboardingStatus: nextStatus },
   })
 
   await prisma.auditLog.create({

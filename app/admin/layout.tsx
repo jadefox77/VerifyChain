@@ -1,6 +1,14 @@
-import { requireAdmin } from "@/lib/admin-auth"
-import { AdminSidebar } from "@/components/admin/sidebar"
-import { prisma } from "@/lib/prisma"
+import type { Metadata } from 'next'
+import { requireAdmin } from '@/lib/admin-auth'
+import { AdminSidebar } from '@/components/admin/sidebar'
+import { prisma } from '@/lib/prisma'
+
+export const metadata: Metadata = {
+  title: {
+    default: 'Admin',
+    template: '%s | VerifyChain Admin',
+  },
+}
 
 export default async function AdminLayout({
   children,
@@ -12,35 +20,21 @@ export default async function AdminLayout({
   const alertCount = await prisma.alertLog.count({
     where: {
       resolved: false,
-      severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
+      severity: { in: ['HIGH_CONCERN', 'CRITICAL'] },
     },
   })
 
-
+  // The admin console is always dark, whatever the visitor's theme setting.
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden">
+    <div className="dark flex h-[100dvh] overflow-hidden bg-gray-950 text-gray-100 [color-scheme:dark]">
       <AdminSidebar
         userRole={session.user.role}
+        userName={session.user.name ?? session.user.email ?? ''}
         alertCount={alertCount}
       />
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-12 border-b border-gray-800/60 flex items-center justify-between px-6 shrink-0 bg-gray-950">
-          <div className="flex items-center gap-3">
-            <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-            <span className="text-[11px] font-mono text-gray-500 uppercase tracking-wider">
-              VerifyChain Africa — Operational Intelligence
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-[11px] font-mono text-gray-600">
-              {new Date().toISOString().split("T")[0]}
-            </span>
-          </div>
-        </header>
-        <main className="flex-1 overflow-y-auto bg-gray-950">
-          {children}
-        </main>
-      </div>
+      <main id="main" className="min-w-0 flex-1 overflow-y-auto pt-14 lg:pt-0">
+        {children}
+      </main>
     </div>
   )
 }

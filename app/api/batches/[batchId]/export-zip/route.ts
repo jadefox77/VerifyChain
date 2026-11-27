@@ -29,19 +29,10 @@ export async function GET(
     include: {
       product: true,
       bottles: {
-        include: { cap: true }, // ← explicit cap include
+        include: { cap: true }, 
       },
     },
   })
-
-  console.log("Batch bottles sample:", JSON.stringify(
-  batch?.bottles.slice(0, 1).map(b => ({
-    id: b.id,
-    serialId: b.serialId,
-    cap: (b as any).cap,
-  })),
-  null, 2
-))
 
   if (!batch) {
     return Response.json({ error: "Batch not found" }, { status: 404 })
@@ -49,7 +40,7 @@ export async function GET(
 
   const productName = batch.product?.name ?? "NoProduct"
   const authMode = batch.product?.authMode ?? "PAIRED"
-  const generationMode = (batch as any).generationMode ?? "PRE_PAIRED"
+  const generationMode = batch.generationMode ?? "PRE_PAIRED"
   const baseName = makeBatchZipName(
     manufacturer.companyName,
     productName,
@@ -135,7 +126,7 @@ export async function GET(
   }
 
   const readmeLines = [
-    `VerifyChain Africa — Batch Export`,
+    `VerifyChain Africa batch export`,
     `═══════════════════════════════════`,
     `Manufacturer : ${manufacturer.companyName}`,
     `Product      : ${productName}`,
@@ -151,14 +142,14 @@ export async function GET(
           `SINGLE MODE INSTRUCTIONS`,
           `────────────────────────`,
           `Each QR in /product-qr/ goes on one unit of packaging.`,
-          `Consumer scans once — no cap required.`,
+          `Shoppers scan one code. There is no cap code.`,
         ].join("\n")
       : generationMode === "UNPAIRED"
       ? [
           `UNPAIRED MODE INSTRUCTIONS`,
           `──────────────────────────`,
-          `/bottle-qr/  → Print on bottle labels`,
-          `/cap-qr/     → Print inside caps`,
+          `/bottle-qr/   Print on bottle labels`,
+          `/cap-qr/      Print inside caps`,
           ``,
           `IMPORTANT: Bottle and cap QRs are NOT pre-matched.`,
           `Pairing must be recorded on the production line via:`,
@@ -171,8 +162,8 @@ export async function GET(
       : [
           `PRE-PAIRED MODE INSTRUCTIONS`,
           `────────────────────────────`,
-          `/bottle-qr/  → Print on bottle label (consumer-visible)`,
-          `/cap-qr/     → Print inside bottle cap (hidden until opened)`,
+          `/bottle-qr/   Print on the bottle label (visible to shoppers)`,
+          `/cap-qr/      Print inside the cap (hidden until opened)`,
           `Each BOTTLE_xxx.png is pre-matched to its CAP_xxx.png.`,
           `Do not mix QR codes across units.`,
         ].join("\n"),

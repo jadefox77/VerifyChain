@@ -1,9 +1,11 @@
 import { requireAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
+import type { OnboardingStatus, SubscriptionPlan } from "@prisma/client"
 import {
   Building2,
   ChevronRight,
+  Plus,
   Search,
 } from "lucide-react"
 
@@ -55,10 +57,10 @@ async function getManufacturers(
   return prisma.manufacturer.findMany({
     where: {
       ...(status && status !== "ALL"
-        ? { onboardingStatus: status as any }
+        ? { onboardingStatus: status as OnboardingStatus }
         : {}),
       ...(plan && plan !== "ALL"
-        ? { subscriptionPlan: plan as any }
+        ? { subscriptionPlan: plan as SubscriptionPlan }
         : {}),
       ...(search
         ? {
@@ -116,24 +118,25 @@ export default async function ManufacturersPage({
       ?._count ?? 0
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-white tracking-tight">
             Manufacturers
           </h1>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">
-            {totalCount} registered · {activeCount} active ·{" "}
-            {pendingCount} pending review
+          <p className="text-xs text-gray-500 mt-0.5">
+            {totalCount} registered, {activeCount} live, {pendingCount}{" "}
+            waiting for review
           </p>
-          <Link
-  href="/admin/manufacturers/create"
-  className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-mono hover:bg-blue-500/20 transition-colors"
->
-  + Create Manufacturer
-</Link>
         </div>
+        <Link
+          href="/admin/manufacturers/create"
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-gray-950 transition-colors hover:bg-brand-400"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Create account
+        </Link>
       </div>
 
       {/* Status filter tabs */}
@@ -144,7 +147,7 @@ export default async function ManufacturersPage({
           { key: "COMPLIANCE_VERIFICATION", label: "Compliance" },
           { key: "TECHNICAL_INTEGRATION", label: "Technical" },
           { key: "PILOT_APPROVAL", label: "Pilot" },
-          { key: "ACTIVE_PRODUCTION", label: "Active" },
+          { key: "ACTIVE_PRODUCTION", label: "Live" },
           { key: "REJECTED", label: "Rejected" },
           { key: "SUSPENDED", label: "Suspended" },
         ].map((tab) => {
@@ -158,8 +161,8 @@ export default async function ManufacturersPage({
           return (
             <Link
               key={tab.key}
-              href={`/admin/manufacturers?status=${tab.key}${plan ? `&plan=${plan}` : ""}${search ? `&search=${search}` : ""}`}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-colors ${
+              href={`/admin/manufacturers?status=${tab.key}${plan ? `&plan=${plan}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`}
+              className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
                 isActive
                   ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
                   : "text-gray-500 border-gray-800 hover:text-gray-300 hover:border-gray-700"
@@ -173,24 +176,27 @@ export default async function ManufacturersPage({
       </div>
 
       {/* Search + plan filter */}
-      <div className="flex items-center gap-3">
-        <form method="GET" action="/admin/manufacturers" className="flex-1 flex gap-3">
+      <div>
+        <form method="GET" action="/admin/manufacturers" className="flex flex-wrap gap-3">
           {status && <input type="hidden" name="status" value={status} />}
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600" />
+          <div className="relative min-w-0 flex-1 basis-56 sm:max-w-sm">
+            <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               name="search"
+              type="search"
+              aria-label="Search manufacturers"
               defaultValue={search}
-              placeholder="Search by company name or RC number..."
+              placeholder="Company name or RC number"
               className="w-full bg-gray-900/60 border border-gray-800 rounded-lg pl-9 pr-4 py-2 text-sm text-gray-300 placeholder:text-gray-600 focus:outline-none focus:border-gray-700"
             />
           </div>
           <select
             name="plan"
+            aria-label="Plan"
             defaultValue={plan ?? "ALL"}
             className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-400 focus:outline-none focus:border-gray-700"
           >
-            <option value="ALL">All Plans</option>
+            <option value="ALL">All plans</option>
             <option value="FREE">Free</option>
             <option value="STARTER">Starter</option>
             <option value="PROFESSIONAL">Professional</option>
@@ -207,22 +213,23 @@ export default async function ManufacturersPage({
 
       {/* Table */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/60">
               {[
                 "Company",
-                "RC Number",
+                "RC number",
                 "Status",
                 "Plan",
-                "Bottles",
-                "Fraud Rate",
+                "Units",
+                "Flagged rate",
                 "Joined",
                 "",
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-3 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs text-gray-400 font-medium"
                 >
                   {h}
                 </th>
@@ -234,7 +241,7 @@ export default async function ManufacturersPage({
               <tr>
                 <td
                   colSpan={8}
-                  className="px-4 py-12 text-center text-sm text-gray-600 font-mono"
+                  className="px-4 py-12 text-center text-sm text-gray-400"
                 >
                   No manufacturers found
                 </td>
@@ -271,38 +278,38 @@ export default async function ManufacturersPage({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-500">
-                        {m.rcNumber ?? "—"}
+                      <span className="font-mono text-xs text-gray-500">
+                        {m.rcNumber ?? "Not provided"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${statusConfig.style}`}
+                        className={`text-xs px-2 py-0.5 rounded border ${statusConfig.style}`}
                       >
                         {statusConfig.label}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-xs font-mono ${planConfig.style}`}
+                        className={`text-xs ${planConfig.style}`}
                       >
                         {planConfig.label}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-400">
+                      <span className="text-xs text-gray-400">
                         {m.totalBottlesGenerated.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-xs font-mono ${fraudAccent}`}
+                        className={`text-xs ${fraudAccent}`}
                       >
                         {fraudRateDisplay}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-600">
+                      <span className="text-xs text-gray-400">
                         {new Date(m.createdAt).toLocaleDateString("en-NG", {
                           day: "numeric",
                           month: "short",
@@ -313,7 +320,7 @@ export default async function ManufacturersPage({
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/manufacturers/${m.id}`}
-                        className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-400 transition-colors font-mono"
+                        className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-400 transition-colors"
                       >
                         View
                         <ChevronRight className="w-3 h-3" />
@@ -325,6 +332,7 @@ export default async function ManufacturersPage({
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

@@ -1,82 +1,49 @@
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
+import { Boxes, CheckCircle2, Package, ScanLine, TriangleAlert } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { redirect } from "next/navigation"
-import {
-  CreditCard,
-  Package,
-  TrendingUp,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-} from "lucide-react"
+import { PageHeader } from "@/components/ui/page-header"
+import { StatCard } from "@/components/ui/stat-card"
+import { Badge, type BadgeTone } from "@/components/ui/badge"
+import { EmptyState } from "@/components/ui/empty-state"
+import { card, cardHeader, cardTitle } from "@/lib/ui"
+import { formatDate, formatNaira, humanize } from "@/lib/format"
+import { PLAN_FEATURES, PLAN_PRICES, getMonthlyUsage } from "@/lib/plans"
+import { UsageNotice } from "@/components/dashboard/usage-notice"
 
-const PLAN_LIMITS: Record<string, number> = {
-  FREE: 5000,
-  STARTER: 50000,
-  PROFESSIONAL: 500000,
-  ENTERPRISE: Infinity,
+export const metadata: Metadata = { title: "Plan and usage" }
+
+const SUPPORT = "support@verifychain.africa"
+
+const STATUS_TONE: Record<string, BadgeTone> = {
+  ACTIVE: "brand",
+  PAST_DUE: "bad",
+  SUSPENDED: "neutral",
+  CANCELLED: "neutral",
 }
 
-const PLAN_PRICES: Record<string, number> = {
-  FREE: 0,
-  STARTER: 150000,
-  PROFESSIONAL: 500000,
-  ENTERPRISE: 1500000,
-}
+export default async function DashboardBillingPage() {
+  const session = await auth()
+  if (!session?.user?.id) redirect("/login")
 
-const PLAN_FEATURES: Record<string, string[]> = {
-  FREE: [
-    "Up to 5,000 bottles/month",
-    "Basic verification",
-    "Standard support",
-  ],
-  STARTER: [
-    "Up to 50,000 bottles/month",
-    "Full fraud detection",
-    "Scan analytics",
-    "Email support",
-  ],
-  PROFESSIONAL: [
-    "Up to 500,000 bottles/month",
-    "Advanced fraud intelligence",
-    "Geographic analytics",
-    "Supply chain monitoring",
-    "Priority support",
-  ],
-  ENTERPRISE: [
-    "Unlimited bottles",
-    "Full platform access",
-    "Dedicated fraud analyst",
-    "Custom integrations",
-    "24/7 support",
-    "Regulatory reporting",
-  ],
-}
-
-async function getManufacturerBilling(userId: string) {
   const manufacturer = await prisma.manufacturer.findUnique({
-    where: { userId },
+    where: { userId: session.user.id },
     select: {
       id: true,
       companyName: true,
       subscriptionPlan: true,
       subscriptionStatus: true,
-      totalBottlesGenerated: true,
-      estimatedBottlesPerMonth: true,
       createdAt: true,
     },
   })
+  if (!manufacturer) redirect("/onboarding")
 
-  if (!manufacturer) return null
-
-  // Batch
-  const [totalScans, totalBatches, recentBatches] = await Promise.all([
-    prisma.scanLog.count({
-      where: { manufacturerId: manufacturer.id },
-    }),
-    prisma.batch.count({
-      where: { manufacturerId: manufacturer.id },
-    }),
+  const [usage, unitsAllTime, totalScans, totalBatches, recentBatches] = await Promise.all([
+    getMonthlyUsage(manufacturer.id, manufacturer.subscriptionPlan),
+    prisma.bottle.count({ where: { manufacturerId: manufacturer.id } }),
+    prisma.scanLog.count({ where: { manufacturerId: manufacturer.id } }),
+    prisma.batch.count({ where: { manufacturerId: manufacturer.id } }),
     prisma.batch.findMany({
       where: { manufacturerId: manufacturer.id },
       orderBy: { createdAt: "desc" },
@@ -91,279 +58,130 @@ async function getManufacturerBilling(userId: string) {
     }),
   ])
 
-  return {
-    ...manufacturer,
-    totalScans,
-    totalBatches,
-    recentBatches,
-  }
-}
-
-export default async function DashboardBillingPage() {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const data = await getManufacturerBilling(session.user.id)
-  if (!data) redirect("/onboarding")
-
-  const planLimit = PLAN_LIMITS[data.subscriptionPlan]
-  const planPrice = PLAN_PRICES[data.subscriptionPlan]
-  const features = PLAN_FEATURES[data.subscriptionPlan]
-
-  const usagePct =
-    planLimit === Infinity
-      ? 0
-      : Math.min((data.totalBottlesGenerated / planLimit) * 100, 100)
-
-  const usageColor =
-    usagePct > 90
-      ? "bg-red-500/60"
-      : usagePct > 70
-      ? "bg-orange-500/60"
-      : "bg-green-500/40"
-
-  const isOverLimit =
-    planLimit !== Infinity && data.totalBottlesGenerated > planLimit
-
-  const thisMonthStart = new Date()
-  thisMonthStart.setDate(1)
-  thisMonthStart.setHours(0, 0, 0, 0)
-
-  const bottlesThisMonth = await prisma.bottle.count({
-    where: {
-      manufacturerId: data.id,
-      createdAt: { gte: thisMonthStart },
-    },
-  })
+  const plan = manufacturer.subscriptionPlan
+  const planPrice = PLAN_PRICES[plan]
+  const features = PLAN_FEATURES[plan]
+  const { unlimited, limit: planLimit, used: unitsThisMonth, percent: usagePct } = usage
+  const usageBar = usage.state === "over" ? "bg-red-500" : usage.state === "near" ? "bg-amber-500" : "bg-brand-500"
 
   return (
-    <div className="p-6 space-y-6 max-w-[1000px]">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-          Billing & Subscription
-        </h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {data.companyName} · Member since{" "}
-          {new Date(data.createdAt).toLocaleDateString("en-NG", {
-            month: "long",
-            year: "numeric",
-          })}
-        </p>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Plan and usage"
+        description={`${manufacturer.companyName} · Customer since ${formatDate(manufacturer.createdAt)}`}
+      />
 
-      {/* Status banner */}
-      {data.subscriptionStatus === "PAST_DUE" && (
-        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-red-400">
-              Payment Past Due
-            </p>
-            <p className="text-xs text-red-400/70 mt-0.5">
-              Your account may be suspended. Please contact
-              support@verifychain.africa to resolve.
+      {manufacturer.subscriptionStatus === "PAST_DUE" && (
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-500/10">
+          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" aria-hidden="true" />
+          <div className="text-sm text-red-800 dark:text-red-200">
+            <p className="font-semibold">Your payment is overdue</p>
+            <p className="mt-0.5">
+              Your account may be suspended if it is not settled. Email{" "}
+              <a href={`mailto:${SUPPORT}`} className="font-medium underline underline-offset-2">
+                {SUPPORT}
+              </a>{" "}
+              to resolve it.
             </p>
           </div>
         </div>
       )}
 
-      {isOverLimit && (
-        <div className="flex items-center gap-3 p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-          <AlertTriangle className="w-5 h-5 text-orange-400 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-orange-400">
-              Plan Limit Exceeded
-            </p>
-            <p className="text-xs text-orange-400/70 mt-0.5">
-              You have exceeded your plan's bottle limit. Please upgrade
-              to continue serializing.
-            </p>
+      <UsageNotice usage={usage} showPlanLink={false} />
+
+      <div className="grid gap-6 lg:grid-cols-5">
+        <section className={`${card} lg:col-span-3`}>
+          <div className={cardHeader}>
+            <h2 className={cardTitle}>Current plan</h2>
+            <Badge tone={STATUS_TONE[manufacturer.subscriptionStatus] ?? "neutral"}>
+              {humanize(manufacturer.subscriptionStatus)}
+            </Badge>
           </div>
-        </div>
-      )}
-
-      {/* Current plan */}
-      <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800/60 rounded-xl p-5">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <CreditCard className="w-4 h-4 text-gray-500" />
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-mono">
-                Current Plan
-              </p>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {data.subscriptionPlan.charAt(0) +
-                data.subscriptionPlan.slice(1).toLowerCase()}{" "}
-              Plan
-            </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {planPrice === 0
-                ? "Free forever"
-                : `₦${planPrice.toLocaleString()} / month`}
+          <div className="p-5">
+            <p className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">{humanize(plan)}</p>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              {planPrice === 0 ? "No monthly fee" : `${formatNaira(planPrice)} a month`}
             </p>
+            <ul className="mt-5 grid gap-2 sm:grid-cols-2">
+              {features.map((f) => (
+                <li key={f} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+                  {f}
+                </li>
+              ))}
+            </ul>
           </div>
-          <span
-            className={`text-xs font-mono px-2.5 py-1 rounded-lg border ${
-              data.subscriptionStatus === "ACTIVE"
-                ? "bg-green-500/10 text-green-600 border-green-500/20"
-                : data.subscriptionStatus === "PAST_DUE"
-                ? "bg-red-500/10 text-red-500 border-red-500/20"
-                : "bg-gray-500/10 text-gray-500 border-gray-500/20"
-            }`}
-          >
-            {data.subscriptionStatus}
-          </span>
-        </div>
-
-        {/* Features */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-          {features.map((f) => (
-            <div key={f} className="flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-              <span className="text-xs text-gray-600 dark:text-gray-400">
-                {f}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div className="pt-4 border-t border-gray-100 dark:border-gray-800/60">
-          <p className="text-xs text-gray-500">
-            To upgrade or change your plan contact{" "}
-            <a
-              href="mailto:support@verifychain.africa"
-              className="text-blue-500 hover:underline"
-            >
-              support@verifychain.africa
+          <p className="border-t border-gray-200 px-5 py-4 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-400">
+            To change your plan, email{" "}
+            <a href={`mailto:${SUPPORT}`} className="font-medium text-brand-700 underline underline-offset-2 dark:text-brand-400">
+              {SUPPORT}
             </a>
+            .
           </p>
-        </div>
-      </div>
+        </section>
 
-      {/* Usage metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {[
-          {
-            label: "Bottles This Month",
-            value: bottlesThisMonth.toLocaleString(),
-            icon: Package,
-            sub:
-              planLimit === Infinity
-                ? "Unlimited plan"
-                : `of ${planLimit.toLocaleString()} limit`,
-          },
-          {
-            label: "Total Serialized",
-            value: data.totalBottlesGenerated.toLocaleString(),
-            icon: TrendingUp,
-            sub: "All time",
-          },
-          {
-            label: "Total Scans",
-            value: data.totalScans.toLocaleString(),
-            icon: Clock,
-            sub: `across ${data.totalBatches} batches`,
-          },
-        ].map((card) => (
-          <div
-            key={card.label}
-            className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800/60 rounded-xl p-4"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <card.icon className="w-4 h-4 text-gray-500" />
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-mono">
-                {card.label}
-              </p>
-            </div>
-            <p className="text-2xl font-bold font-mono text-gray-900 dark:text-white">
-              {card.value}
+        <section className={`${card} lg:col-span-2`}>
+          <div className={cardHeader}>
+            <h2 className={cardTitle}>This month</h2>
+          </div>
+          <div className="p-5">
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-gray-900 dark:text-white">
+              {unitsThisMonth.toLocaleString()}
             </p>
-            <p className="text-[11px] text-gray-500 mt-1">{card.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Usage bar */}
-      {planLimit !== Infinity && (
-        <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800/60 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-900 dark:text-white">
-              Plan Usage
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              {unlimited ? "units serialised, no monthly limit" : `of ${planLimit.toLocaleString()} units serialised`}
             </p>
-            <span className="text-sm font-mono text-gray-500">
-              {data.totalBottlesGenerated.toLocaleString()} /{" "}
-              {planLimit.toLocaleString()}
-            </span>
-          </div>
-          <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${usageColor}`}
-              style={{ width: `${usagePct}%` }}
-            />
-          </div>
-          <div className="flex justify-between mt-2">
-            <span className="text-xs text-gray-500 font-mono">
-              {usagePct.toFixed(1)}% used
-            </span>
-            <span className="text-xs text-gray-500 font-mono">
-              {Math.max(
-                planLimit - data.totalBottlesGenerated,
-                0
-              ).toLocaleString()}{" "}
-              remaining
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Recent batches */}
-      <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800/60 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800/60">
-          <h2 className="text-sm font-medium text-gray-900 dark:text-white">
-            Recent Serialization Activity
-          </h2>
-        </div>
-        <div className="divide-y divide-gray-100 dark:divide-gray-800/40">
-          {data.recentBatches.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <p className="text-sm text-gray-500">No batches yet</p>
-            </div>
-          ) : (
-            data.recentBatches.map((batch) => (
-              <div
-                key={batch.id}
-                className="px-4 py-3 flex items-center justify-between"
-              >
-                <div>
-                  <p className="text-sm font-mono text-gray-700 dark:text-gray-300">
-                    {batch.batchCode}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {batch.product?.name ?? "No product"}
-                  </p>
+            {!unlimited && (
+              <>
+                <div
+                  className="mt-5 h-2.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(usagePct)}
+                  aria-label="Monthly allowance used"
+                >
+                  <div className={`h-full rounded-full ${usageBar}`} style={{ width: `${usagePct}%` }} />
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-mono text-blue-500">
-                    {batch.bottleCount.toLocaleString()} bottles
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {new Date(batch.createdAt).toLocaleDateString(
-                      "en-NG",
-                      {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      }
-                    )}
-                  </p>
+                <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                  <span>{usagePct.toFixed(1)}% used</span>
+                  <span>{usage.remaining.toLocaleString()} left, resets {formatDate(usage.resetsOn)}</span>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              </>
+            )}
+          </div>
+        </section>
       </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Units serialised" value={unitsAllTime.toLocaleString()} hint="All time" icon={Package} />
+        <StatCard label="Batches" value={totalBatches.toLocaleString()} hint="All time" icon={Boxes} />
+        <StatCard label="Scans" value={totalScans.toLocaleString()} hint="All time" icon={ScanLine} />
+      </div>
+
+      <section className={card}>
+        <div className={cardHeader}>
+          <h2 className={cardTitle}>Recent batches</h2>
+        </div>
+        {recentBatches.length === 0 ? (
+          <EmptyState icon={Boxes} title="No batches yet" description="Batches you generate count towards your monthly allowance." />
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {recentBatches.map((batch) => (
+              <li key={batch.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{batch.product?.name ?? "No product"}</p>
+                  <p className="truncate font-mono text-xs text-gray-500 dark:text-gray-400">{batch.batchCode}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm tabular-nums text-gray-900 dark:text-white">{batch.bottleCount.toLocaleString()} units</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(batch.createdAt)}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }

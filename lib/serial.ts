@@ -24,15 +24,7 @@ export function generateHiddenSerialId(): string {
   return generateHiddenId()
 }
 
-export function formatSerialId(serialId: string): string {
-  if (serialId.length === 12) {
-    return `${serialId.slice(0, 4)}-${serialId.slice(4, 8)}-${serialId.slice(8, 12)}`
-  }
-  if (serialId.length === 6) {
-    return `${serialId.slice(0, 3)}-${serialId.slice(3, 6)}`
-  }
-  return serialId
-}
+export { formatSerialId } from "@/lib/serial-format"
 
 function signSerial(serialId: string): string {
   return crypto
@@ -42,9 +34,8 @@ function signSerial(serialId: string): string {
     .slice(0, 16)
 }
 
-// ── Use NEXT_PUBLIC_APP_URL for QR codes ──────────────────────────────────────
-// NEXTAUTH_URL is for auth callbacks only — not for public-facing QR URLs
-// NEXT_PUBLIC_APP_URL must be set to your production domain in Vercel
+// QR codes use NEXT_PUBLIC_APP_URL. NEXTAUTH_URL is only for auth callbacks,
+// so NEXT_PUBLIC_APP_URL must be set to the production domain.
 
 function getBaseUrl(): string {
   return (

@@ -226,7 +226,7 @@ const SEVERITY_CONFIG = {
   HIGH_CONCERN: {
     dot: "bg-orange-500",
     badge: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    label: "High Concern",
+    label: "High concern",
   },
   CRITICAL: {
     dot: "bg-red-500 animate-pulse",
@@ -263,15 +263,15 @@ const regional = await getRegionalBreakdown()
   const genuinePoints = mapPoints.filter((p) => !p.fraudFlag)
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
       <div className="flex items-start justify-between">
   <div>
     <h1 className="text-lg font-bold text-white tracking-tight">
-      Fraud Intelligence Center
+      Fraud
     </h1>
-    <p className="text-xs text-gray-500 font-mono mt-0.5">
-      Platform-wide threat monitoring · Last 30 days · Runs hourly
+    <p className="text-xs text-gray-500 mt-0.5">
+      All manufacturers, last 30 days. The fraud checks run once a day at midnight UTC, or on demand with the button.
     </p>
   </div>
   <FraudPipelineTrigger />
@@ -281,7 +281,7 @@ const regional = await getRegionalBreakdown()
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           {
-            label: "Critical Threats",
+            label: "Critical",
             value: summary.criticalAlerts,
             style: "text-red-400",
             border: "border-red-500/20",
@@ -289,7 +289,7 @@ const regional = await getRegionalBreakdown()
             dot: "bg-red-500 animate-pulse",
           },
           {
-            label: "High Concern",
+            label: "High concern",
             value: summary.highConcernAlerts,
             style: "text-orange-400",
             border: "border-orange-500/20",
@@ -305,7 +305,7 @@ const regional = await getRegionalBreakdown()
             dot: "bg-yellow-500",
           },
           {
-            label: "Resolved Today",
+            label: "Resolved today",
             value: summary.resolvedToday,
             style: "text-green-400",
             border: "border-green-500/20",
@@ -319,11 +319,11 @@ const regional = await getRegionalBreakdown()
           >
             <div className="flex items-center gap-2 mb-2">
               <div className={`w-1.5 h-1.5 rounded-full ${card.dot}`} />
-              <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">
+              <p className="text-xs text-gray-500 font-medium">
                 {card.label}
               </p>
             </div>
-            <p className={`text-3xl font-bold font-mono ${card.style}`}>
+            <p className={`text-3xl font-bold tabular-nums ${card.style}`}>
               {card.value}
             </p>
           </div>
@@ -337,20 +337,20 @@ const regional = await getRegionalBreakdown()
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60">
             <div className="flex items-center gap-2">
               <MapPin className="w-3.5 h-3.5 text-blue-400" />
-              <h2 className="text-xs font-mono text-gray-300 uppercase tracking-wider">
-                Geographic Fraud Intelligence
+              <h2 className="text-xs text-gray-300 font-medium">
+                Scan locations
               </h2>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-red-500" />
-                <span className="text-[10px] font-mono text-gray-500">
-                  Fraud ({fraudPoints.length})
+                <span className="text-xs text-gray-500">
+                  Flagged ({fraudPoints.length})
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-green-500 opacity-60" />
-                <span className="text-[10px] font-mono text-gray-500">
+                <span className="text-xs text-gray-500">
                   Genuine ({genuinePoints.length})
                 </span>
               </div>
@@ -363,13 +363,13 @@ const regional = await getRegionalBreakdown()
 
         {/* Alert type breakdown */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
-            Alert Categories
+          <h2 className="text-xs text-gray-400 mb-4 font-medium">
+            Open alerts by type
           </h2>
           <div className="space-y-2">
             {summary.alertsByType.length === 0 ? (
-              <p className="text-xs text-gray-600 font-mono">
-                No active alerts
+              <p className="text-xs text-gray-400">
+                No open alerts
               </p>
             ) : (
               summary.alertsByType.map((a) => {
@@ -392,7 +392,7 @@ const regional = await getRegionalBreakdown()
                           {config.label}
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono text-gray-500">
+                      <span className="text-xs text-gray-500">
                         {a._count}
                       </span>
                     </div>
@@ -416,12 +416,8 @@ const regional = await getRegionalBreakdown()
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60">
             <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-              </span>
-              <h2 className="text-xs font-mono text-gray-300 uppercase tracking-wider">
-                Active Critical & High Concern
+              <h2 className="text-xs text-gray-300 font-medium">
+                Open critical and high-concern alerts
               </h2>
             </div>
           </div>
@@ -429,7 +425,7 @@ const regional = await getRegionalBreakdown()
             {summary.recentCritical.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <ShieldAlert className="w-6 h-6 text-green-500 mx-auto mb-2" />
-                <p className="text-xs text-gray-600 font-mono">
+                <p className="text-xs text-gray-400">
                   No critical alerts
                 </p>
               </div>
@@ -443,11 +439,11 @@ const regional = await getRegionalBreakdown()
                         className={`w-1.5 h-1.5 rounded-full ${config.dot}`}
                       />
                       <span
-                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${config.badge}`}
+                        className={`text-xs px-1.5 py-0.5 rounded border ${config.badge}`}
                       >
                         {config.label}
                       </span>
-                      <span className="text-[10px] font-mono text-gray-600">
+                      <span className="text-xs text-gray-400">
                         {alert.type.replace(/_/g, " ")}
                       </span>
                     </div>
@@ -455,21 +451,21 @@ const regional = await getRegionalBreakdown()
                       {alert.message}
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-gray-600">
+                      <span className="text-xs text-gray-400">
                         {alert.manufacturer?.companyName ?? "Platform-wide"}
                       </span>
                       {alert.confidenceScore && (
                         <>
-                          <span className="text-gray-700">·</span>
-                          <span className="text-[10px] font-mono text-gray-600">
+                          <span className="text-gray-500">·</span>
+                          <span className="text-xs text-gray-400">
                             {Math.round(alert.confidenceScore * 100)}% confidence
                           </span>
                         </>
                       )}
                       {alert.region && (
                         <>
-                          <span className="text-gray-700">·</span>
-                          <span className="text-[10px] font-mono text-gray-600">
+                          <span className="text-gray-500">·</span>
+                          <span className="text-xs text-gray-400">
                             {alert.region}
                           </span>
                         </>
@@ -485,14 +481,14 @@ const regional = await getRegionalBreakdown()
         {/* Manufacturer fraud rankings */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl">
           <div className="px-4 py-3 border-b border-gray-800/60">
-            <h2 className="text-xs font-mono text-gray-300 uppercase tracking-wider">
-              Manufacturer Fraud Rankings
+            <h2 className="text-xs text-gray-300 font-medium">
+              Flagged rate by manufacturer
             </h2>
           </div>
           <div className="divide-y divide-gray-800/40">
             {summary.manufacturerFraudRates.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <p className="text-xs text-gray-600 font-mono">
+                <p className="text-xs text-gray-400">
                   No active manufacturers
                 </p>
               </div>
@@ -523,7 +519,7 @@ const regional = await getRegionalBreakdown()
                   <div key={m.id} className="px-4 py-2.5">
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-gray-700 w-4">
+                        <span className="text-xs text-gray-500 w-4">
                           {i + 1}
                         </span>
                         <span className="text-xs text-gray-300">
@@ -531,7 +527,7 @@ const regional = await getRegionalBreakdown()
                         </span>
                       </div>
                       <span
-                        className={`text-xs font-mono font-bold ${fraudAccent}`}
+                        className={`text-xs font-bold ${fraudAccent}`}
                       >
                         {m.fraudRateCached.toFixed(1)}%
                       </span>
@@ -543,9 +539,9 @@ const regional = await getRegionalBreakdown()
                       />
                     </div>
                     <div className="ml-6 flex items-center gap-2 mt-0.5">
-                      <span className="text-[9px] font-mono text-gray-700">
+                      <span className="text-[11px] text-gray-500">
                         {m.totalFraudFlags.toLocaleString()} flags ·{" "}
-                        {m.totalBottlesGenerated.toLocaleString()} bottles ·{" "}
+                        {m.totalBottlesGenerated.toLocaleString()} units ·{" "}
                         {m._count.alertLogs} alerts
                       </span>
                     </div>
@@ -560,18 +556,19 @@ const regional = await getRegionalBreakdown()
       {/* Regional breakdown table */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/60">
-          <h2 className="text-xs font-mono text-gray-300 uppercase tracking-wider">
-            Regional Fraud Breakdown — Last 30 Days
+          <h2 className="text-xs text-gray-300 font-medium">
+            Fraud by state, last 30 days
           </h2>
         </div>
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/40">
               {["Region", "Total Scans", "Fraud Events", "Fraud Rate", "Risk"].map(
                 (h) => (
                   <th
                     key={h}
-                    className="px-4 py-2.5 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                    className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium"
                   >
                     {h}
                   </th>
@@ -584,9 +581,9 @@ const regional = await getRegionalBreakdown()
               <tr>
                 <td
                   colSpan={5}
-                  className="px-4 py-8 text-center text-xs text-gray-600 font-mono"
+                  className="px-4 py-8 text-center text-xs text-gray-400"
                 >
-                  No regional data — scan logs need location data
+                  No scans with a location yet. Location is only recorded when the shopper shares it.
                 </td>
               </tr>
             ) : (
@@ -605,32 +602,32 @@ const regional = await getRegionalBreakdown()
                   >
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-3 h-3 text-gray-600" />
+                        <MapPin className="w-3 h-3 text-gray-400" />
                         <span className="text-sm text-gray-300">
                           {r.region}
                         </span>
                       </div>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-400">
+                      <span className="text-xs text-gray-400">
                         {r.total.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-red-400">
+                      <span className="text-xs text-red-400">
                         {r.fraud.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`text-xs font-mono font-bold ${riskLevel.style}`}
+                        className={`text-xs font-bold ${riskLevel.style}`}
                       >
                         {r.rate.toFixed(1)}%
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`text-[10px] font-mono ${riskLevel.style}`}
+                        className={`text-xs ${riskLevel.style}`}
                       >
                         {riskLevel.label}
                       </span>
@@ -641,6 +638,7 @@ const regional = await getRegionalBreakdown()
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

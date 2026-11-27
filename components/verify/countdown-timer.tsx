@@ -1,93 +1,49 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
+import { Timer } from "lucide-react"
 
 export function CountdownTimer({ minutes = 10 }: { minutes?: number }) {
-  const [secondsLeft, setSecondsLeft] = useState(minutes * 60)
-  const [expired, setExpired] = useState(false)
+  const [deadline] = useState(() => Date.now() + minutes * 60 * 1000)
+  const [now, setNow] = useState(() => Date.now())
+
+  const secondsLeft = Math.max(0, Math.ceil((deadline - now) / 1000))
+  const expired = secondsLeft === 0
 
   useEffect(() => {
-    if (secondsLeft <= 0) {
-      setExpired(true)
-      return
-    }
-
-    const timer = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          setExpired(true)
-          clearInterval(timer)
-          return 0
-        }
-        return s - 1
-      })
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [])
-
-  const mins = Math.floor(secondsLeft / 60)
-  const secs = secondsLeft % 60
+    if (expired) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [expired])
 
   if (expired) {
     return (
-      <div className="flex items-center gap-2 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg">
-        <span className="text-red-400 text-sm">⏱</span>
-        <p className="text-xs text-red-400">
-          <strong>Session expired.</strong> Please scan the bottle QR again to restart.
+      <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-left text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+        <Timer className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <p>
+          <span className="font-semibold">Time is up.</span> Scan the bottle label again to restart the check.
         </p>
       </div>
     )
   }
 
-  const isUrgent = secondsLeft <= 60
-  const isWarning = secondsLeft <= 180
+  const mins = Math.floor(secondsLeft / 60)
+  const secs = secondsLeft % 60
+  const urgent = secondsLeft <= 60
 
   return (
     <div
-      className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors ${
-        isUrgent
-          ? "bg-red-500/10 border-red-500/20"
-          : isWarning
-          ? "bg-orange-500/10 border-orange-500/20"
-          : "bg-yellow-500/5 border-yellow-500/20"
+      className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-sm ${
+        urgent
+          ? "border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
+          : "border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200"
       }`}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className={`text-sm ${
-            isUrgent
-              ? "text-red-400"
-              : isWarning
-              ? "text-orange-400"
-              : "text-yellow-400"
-          }`}
-        >
-          ⏱
-        </span>
-        <p
-          className={`text-xs ${
-            isUrgent
-              ? "text-red-400"
-              : isWarning
-              ? "text-orange-400"
-              : "text-yellow-400"
-          }`}
-        >
-          {isUrgent
-            ? "Hurry! Session expiring soon"
-            : "Time remaining to scan cap"}
-        </p>
-      </div>
-      <span
-        className={`text-sm font-bold font-mono ${
-          isUrgent
-            ? "text-red-400"
-            : isWarning
-            ? "text-orange-400"
-            : "text-yellow-400"
-        }`}
-      >
+      <span className="flex items-center gap-2">
+        <Timer className="h-4 w-4" aria-hidden="true" />
+        {urgent ? "Less than a minute left" : "Time left to scan the cap"}
+      </span>
+      <span className="font-mono font-semibold tabular-nums" aria-live="off">
         {String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}
       </span>
     </div>

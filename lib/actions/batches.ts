@@ -10,6 +10,7 @@ import {
 import { redirect } from "next/navigation"
 import nodeCrypto from "crypto"
 import { makeManufacturerCode } from "@/lib/batch-naming"
+import { getMonthlyUsage } from "@/lib/plans"
 
 export async function generateBatch(formData: FormData) {
   const session = await auth()
@@ -19,13 +20,14 @@ export async function generateBatch(formData: FormData) {
     where: { userId: session.user.id },
   })
   if (!manufacturer) redirect("/onboarding")
+  if (manufacturer.onboardingStatus !== "ACTIVE_PRODUCTION") redirect("/onboarding/pending")
 
   const productId = formData.get("productId") as string
   const quantity = parseInt(formData.get("quantity") as string, 10)
-  const notes = formData.get("notes") as string
-  const targetRegion = formData.get("targetRegion") as string
+  const notes = String(formData.get("notes") ?? "").trim().slice(0, 500)
+  const targetRegion = String(formData.get("targetRegion") ?? "").trim()
   const generationMode =
-    (formData.get("generationMode") as string)?.trim() || "PRE_PAIRED"
+    formData.get("generationMode") === "UNPAIRED" ? "UNPAIRED" : "PRE_PAIRED"
 
   if (!productId || isNaN(quantity) || quantity < 1 || quantity > 5000)
     return
@@ -34,6 +36,12 @@ export async function generateBatch(formData: FormData) {
     where: { id: productId, manufacturerId: manufacturer.id },
   })
   if (!product) return
+
+  // Soft plan limit: batches are allowed while this month's usage is under the
+  // allowance. Once it is reached, new batches wait until the allowance resets
+  // or the plan changes.
+  const usage = await getMonthlyUsage(manufacturer.id, manufacturer.subscriptionPlan)
+  if (usage.state === "over") redirect("/dashboard/batches?error=limit")
 
   const mfrCode = makeManufacturerCode(manufacturer.companyName)
   const date = new Date().toISOString().split("T")[0].replace(/-/g, "")
@@ -49,7 +57,7 @@ export async function generateBatch(formData: FormData) {
       targetRegion: targetRegion || null,
       batchCode,
       generationMode,
-    } as any,
+    },
   })
 
   // Generate bottles
@@ -68,7 +76,7 @@ export async function generateBatch(formData: FormData) {
 
   await prisma.bottle.createMany({ data: bottlesData })
 
-  // ── PRE_PAIRED — link each cap directly to its bottle ──────────────────
+  // Pre-paired: link each cap directly to its bottle
   if (product.authMode === "PAIRED" && generationMode === "PRE_PAIRED") {
     const bottles = await prisma.bottle.findMany({
       where: { batchId: batch.id },
@@ -78,7 +86,7 @@ export async function generateBatch(formData: FormData) {
     const capsData = bottles.map((bottle) => {
       const hiddenSerialId = generateHiddenSerialId()
       return {
-        bottleId: bottle.id,  // ← directly linked to bottle
+        bottleId: bottle.id,
         topCode: generateTopCapCode(),
         hiddenSerialId,
         hiddenHmacSig: nodeCrypto
@@ -91,7 +99,7 @@ export async function generateBatch(formData: FormData) {
     await prisma.cap.createMany({ data: capsData })
   }
 
-  // ── UNPAIRED — generate cap identities with no bottle link ─────────────
+  // Unpaired: cap identities with no bottle yet, linked on the production line
   if (product.authMode === "PAIRED" && generationMode === "UNPAIRED") {
     const capsData = Array.from({ length: quantity }, () => {
       const hiddenSerialId = generateHiddenSerialId()
@@ -103,15 +111,11 @@ export async function generateBatch(formData: FormData) {
           .update(hiddenSerialId)
           .digest("hex"),
         batchId: batch.id,
-        // bottleId intentionally omitted — null by default
       }
     })
 
-    await prisma.cap.createMany({ data: capsData as any })
+    await prisma.cap.createMany({ data: capsData })
   }
-
-  // ── SINGLE mode — no caps needed ───────────────────────────────────────
-  // Bottles only, no cap generation
 
   redirect(`/dashboard/batches/${batch.id}`)
 }

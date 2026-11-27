@@ -15,7 +15,7 @@ type FraudMapProps = {
 
 export function FraudMap({ scanPoints }: FraudMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstanceRef = useRef<any>(null)
+  const mapInstanceRef = useRef<import("leaflet").Map | null>(null)
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return
@@ -23,7 +23,7 @@ export function FraudMap({ scanPoints }: FraudMapProps) {
     // Dynamically import leaflet to avoid SSR issues
     import("leaflet").then((L) => {
       // Fix default marker icon paths broken by webpack
-      delete (L.Icon.Default.prototype as any)._getIconUrl
+      delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl
       L.Icon.Default.mergeOptions({
         iconRetinaUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -62,7 +62,7 @@ export function FraudMap({ scanPoints }: FraudMapProps) {
 
         circle.bindPopup(
           `<div style="font-family: monospace; font-size: 11px; color: #111;">
-            <strong>${point.fraudFlag ? "⚠ FRAUD" : "✓ Genuine"}</strong><br/>
+            <strong>${point.fraudFlag ? "Flagged" : "Genuine"}</strong><br/>
             Region: ${point.region ?? "Unknown"}<br/>
             ${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}
           </div>`

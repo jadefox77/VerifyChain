@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     // Verify factory token
     if (!token || !verifyFactoryToken(payload, token)) {
       return Response.json(
-        { error: "Unauthorized — invalid factory token" },
+        { error: "Unauthorized: invalid factory token" },
         { status: 401 }
       )
     }
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
           manufacturerId,
           type: "PRODUCTION_PAIRING_FAIL",
           severity: "HIGH_CONCERN",
-          message: `Duplicate pairing attempt on bottle ${bottleSerialId} — already has a cap`,
+          message: `Duplicate pairing attempt on bottle ${bottleSerialId}, which already has a cap`,
           detail: JSON.stringify({ lineId, topCapCode }),
           confidenceScore: 0.95,
         },
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
             manufacturerId,
             type: "PRODUCTION_PAIRING_FAIL",
             severity: "CRITICAL",
-            message: `Duplicate cap identity detected on line — possible cloning attempt`,
+            message: `Duplicate cap codes read on the production line. The cap may be cloned.`,
             detail: JSON.stringify({ topCapCode, hiddenSerialId, lineId }),
             confidenceScore: 0.98,
           },
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
 
         return Response.json(
           {
-            error: "Cap identity already exists — possible clone",
+            error: "Cap identity already exists. The cap may be cloned.",
             code: "DUPLICATE_CAP_IDENTITY",
           },
           { status: 409 }

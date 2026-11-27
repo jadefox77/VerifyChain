@@ -27,7 +27,7 @@ export async function GET(
     include: {
       product: true,
       bottles: {
-        include: { cap: true }, // ← explicit cap include
+        include: { cap: true }, 
       },
     },
   })
@@ -38,7 +38,7 @@ export async function GET(
 
   const productName = batch.product?.name ?? "NoProduct"
   const authMode = batch.product?.authMode ?? "PAIRED"
-  const generationMode = (batch as any).generationMode ?? "PRE_PAIRED"
+  const generationMode = batch.generationMode ?? "PRE_PAIRED"
   const filename = makeCsvName(
     manufacturer.companyName,
     productName,
@@ -121,7 +121,7 @@ export async function GET(
     rows = [...bottleRows, ...capRows]
   } else {
     rows = batch.bottles.map((bottle, i) => {
-      const cap = (bottle as any).cap
+      const cap = bottle.cap
       const bottleUrl = buildVerifyUrl(bottle.serialId)
       const capUrl = cap
         ? buildCapVerifyUrl(cap.hiddenSerialId, bottle.serialId)
@@ -142,7 +142,7 @@ export async function GET(
   }
 
   const csv = [
-    `# VerifyChain Africa — Serial Export`,
+    `# VerifyChain Africa serial export`,
     `# Manufacturer: ${manufacturer.companyName}`,
     `# Product: ${productName}`,
     `# Batch: ${batch.batchCode}`,

@@ -166,13 +166,13 @@ export default async function AnalyticsPage() {
   )
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
       <div>
         <h1 className="text-lg font-bold text-white tracking-tight">
           Verification Analytics
         </h1>
-        <p className="text-xs text-gray-500 font-mono mt-0.5">
+        <p className="text-xs text-gray-500 mt-0.5">
           Platform-wide scan intelligence · All manufacturers combined
         </p>
       </div>
@@ -219,15 +219,15 @@ export default async function AnalyticsPage() {
             className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4"
           >
             <div className="flex items-start justify-between mb-2">
-              <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">
+              <p className="text-xs text-gray-500 font-medium">
                 {card.label}
               </p>
               <card.icon className={`w-3.5 h-3.5 ${card.accent}`} />
             </div>
-            <p className={`text-2xl font-bold font-mono ${card.accent}`}>
+            <p className={`text-2xl font-bold tabular-nums ${card.accent}`}>
               {card.value}
             </p>
-            <p className="text-[10px] text-gray-600 font-mono mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               {card.sub}
             </p>
           </div>
@@ -262,10 +262,10 @@ export default async function AnalyticsPage() {
           >
             <card.icon className={`w-4 h-4 shrink-0 ${card.color}`} />
             <div>
-              <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
+              <p className="text-xs text-gray-400 font-medium">
                 {card.label}
               </p>
-              <p className={`text-lg font-bold font-mono ${card.color}`}>
+              <p className={`text-lg font-bold tabular-nums ${card.color}`}>
                 {card.value}
               </p>
             </div>
@@ -276,19 +276,19 @@ export default async function AnalyticsPage() {
       {/* 14-day scan volume chart */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
-            Scan Volume — Last 14 Days
+          <h2 className="text-xs text-gray-400 font-medium">
+            Scans, last 14 days
           </h2>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-sm bg-blue-500/50" />
-              <span className="text-[10px] font-mono text-gray-500">
+              <span className="text-xs text-gray-500">
                 Genuine
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-sm bg-red-500/50" />
-              <span className="text-[10px] font-mono text-gray-500">
+              <span className="text-xs text-gray-500">
                 Fraud
               </span>
             </div>
@@ -317,7 +317,7 @@ export default async function AnalyticsPage() {
                     style={{ height: `${genuinePct}%` }}
                   />
                 </div>
-                <span className="text-[8px] font-mono text-gray-700 text-center">
+                <span className="text-[8px] text-gray-500 text-center">
                   {dayLabels[i]}
                 </span>
               </div>
@@ -326,14 +326,14 @@ export default async function AnalyticsPage() {
         </div>
 
         <div className="mt-3 pt-3 border-t border-gray-800/40 flex justify-between">
-          <span className="text-[10px] font-mono text-gray-600">
+          <span className="text-xs text-gray-400">
             Total:{" "}
             {data.dailyScans
               .reduce((s, d) => s + d.total, 0)
               .toLocaleString()}{" "}
             scans
           </span>
-          <span className="text-[10px] font-mono text-gray-600">
+          <span className="text-xs text-gray-400">
             Peak:{" "}
             {Math.max(...data.dailyScans.map((d) => d.total)).toLocaleString()}
           </span>
@@ -344,7 +344,7 @@ export default async function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Scan layer breakdown */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
+          <h2 className="text-xs text-gray-400 mb-4 font-medium">
             Scan Layer Breakdown
           </h2>
 
@@ -373,7 +373,7 @@ export default async function AnalyticsPage() {
                     <span className="text-xs text-gray-400">
                       {item.label}
                     </span>
-                    <span className="text-xs font-mono text-gray-500">
+                    <span className="text-xs text-gray-500">
                       {item.value.toLocaleString()} ({pct}%)
                     </span>
                   </div>
@@ -392,13 +392,13 @@ export default async function AnalyticsPage() {
 
         {/* Hourly distribution */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
-            Hourly Activity — Last 7 Days
+          <h2 className="text-xs text-gray-400 mb-4 font-medium">
+            Scans by hour, last 7 days
           </h2>
 
           {data.hourlyDistribution.length === 0 ? (
             <div className="flex items-center justify-center h-32">
-              <p className="text-xs text-gray-600 font-mono">
+              <p className="text-xs text-gray-400">
                 No scan data yet
               </p>
             </div>
@@ -417,7 +417,7 @@ export default async function AnalyticsPage() {
 
                 return (
                   <div key={hour} className="flex items-center gap-2">
-                    <span className="text-[9px] font-mono text-gray-700 w-8 text-right shrink-0">
+                    <span className="text-[11px] text-gray-500 w-8 text-right shrink-0">
                       {formatHour(hour)}
                     </span>
                     <div className="flex-1 h-3 bg-gray-800/60 rounded-sm overflow-hidden">
@@ -429,7 +429,7 @@ export default async function AnalyticsPage() {
                       />
                     </div>
                     {count > 0 && (
-                      <span className="text-[9px] font-mono text-gray-700 w-8 shrink-0">
+                      <span className="text-[11px] text-gray-500 w-8 shrink-0">
                         {count}
                       </span>
                     )}
@@ -442,14 +442,14 @@ export default async function AnalyticsPage() {
 
         {/* Top regions */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
-            Top Regions — Last 30 Days
+          <h2 className="text-xs text-gray-400 mb-4 font-medium">
+            Top states, last 30 days
           </h2>
 
           <div className="space-y-3">
             {data.topRegions.length === 0 ? (
-              <p className="text-xs text-gray-600 font-mono">
-                No regional data — location not captured in scan logs
+              <p className="text-xs text-gray-400">
+                No scans with a location yet. Location is only recorded when the shopper shares it.
               </p>
             ) : (
               data.topRegions.map((r, i) => {
@@ -458,15 +458,15 @@ export default async function AnalyticsPage() {
                   <div key={r.region}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-gray-700 w-4">
+                        <span className="text-xs text-gray-500 w-4">
                           {i + 1}
                         </span>
-                        <MapPin className="w-3 h-3 text-gray-600" />
+                        <MapPin className="w-3 h-3 text-gray-400" />
                         <span className="text-xs text-gray-300">
                           {r.region}
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono text-gray-500">
+                      <span className="text-xs text-gray-500">
                         {r._count.toLocaleString()}
                       </span>
                     </div>
@@ -487,11 +487,12 @@ export default async function AnalyticsPage() {
       {/* Manufacturer scan rankings */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/60">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs text-gray-400 font-medium">
             Manufacturer Scan Rankings
           </h2>
         </div>
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/40">
               {[
@@ -504,7 +505,7 @@ export default async function AnalyticsPage() {
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-2.5 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                  className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium"
                 >
                   {h}
                 </th>
@@ -516,7 +517,7 @@ export default async function AnalyticsPage() {
               <tr>
                 <td
                   colSpan={6}
-                  className="px-4 py-8 text-center text-xs text-gray-600 font-mono"
+                  className="px-4 py-8 text-center text-xs text-gray-400"
                 >
                   No active manufacturers
                 </td>
@@ -540,7 +541,7 @@ export default async function AnalyticsPage() {
                     className="hover:bg-gray-800/20 transition-colors"
                   >
                     <td className="px-4 py-2.5">
-                      <span className="text-[10px] font-mono text-gray-600">
+                      <span className="text-xs text-gray-400">
                         {i + 1}
                       </span>
                     </td>
@@ -550,18 +551,18 @@ export default async function AnalyticsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-blue-400">
+                      <span className="text-xs text-blue-400">
                         {m.totalScans.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-red-400">
+                      <span className="text-xs text-red-400">
                         {m.totalFraudFlags.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`text-xs font-mono font-bold ${fraudAccent}`}
+                        className={`text-xs font-bold ${fraudAccent}`}
                       >
                         {m.fraudRateCached.toFixed(1)}%
                       </span>
@@ -580,6 +581,7 @@ export default async function AnalyticsPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

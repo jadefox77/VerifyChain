@@ -7,8 +7,6 @@ import {
   TrendingUp,
   Building2,
   ChevronRight,
-  CheckCircle2,
-  Layers,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -137,20 +135,20 @@ export default async function SerializationPage() {
   )
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-white tracking-tight">
             Serialization Engine
           </h1>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">
+          <p className="text-xs text-gray-500 mt-0.5">
             Identity generation · Cap pairing · Export management
           </p>
         </div>
         <Link
           href="/admin/serialization/pairing"
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-mono hover:bg-blue-500/20 transition-colors"
+          className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs hover:bg-blue-500/20 transition-colors"
         >
           <Cpu className="w-3.5 h-3.5" />
           Production Pairing Monitor
@@ -207,15 +205,15 @@ export default async function SerializationPage() {
             className={`bg-gray-900/60 border rounded-xl p-4 ${card.border}`}
           >
             <div className="flex items-start justify-between mb-2">
-              <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">
+              <p className="text-xs text-gray-500 font-medium">
                 {card.label}
               </p>
               <card.icon className={`w-3.5 h-3.5 ${card.accent}`} />
             </div>
-            <p className={`text-2xl font-bold font-mono ${card.accent}`}>
+            <p className={`text-2xl font-bold tabular-nums ${card.accent}`}>
               {card.value}
             </p>
-            <p className="text-[10px] text-gray-600 font-mono mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               {card.sub}
             </p>
           </div>
@@ -254,13 +252,13 @@ export default async function SerializationPage() {
             key={card.label}
             className={`border rounded-xl p-4 ${card.border} ${card.bg}`}
           >
-            <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-1">
+            <p className="text-xs text-gray-500 mb-1 font-medium">
               {card.label}
             </p>
-            <p className={`text-2xl font-bold font-mono ${card.color}`}>
+            <p className={`text-2xl font-bold tabular-nums ${card.color}`}>
               {card.value}
             </p>
-            <p className="text-[10px] text-gray-600 font-mono mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               {card.sub}
             </p>
           </div>
@@ -271,8 +269,8 @@ export default async function SerializationPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Daily throughput */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
-            Daily Throughput — Last 7 Days
+          <h2 className="text-xs text-gray-400 mb-4 font-medium">
+            Units serialised per day, last 7 days
           </h2>
           <div className="flex items-end gap-2 h-36">
             {metrics.dailyThroughput.map(({ count }, i) => {
@@ -286,7 +284,7 @@ export default async function SerializationPage() {
                   className="flex-1 flex flex-col items-center gap-1"
                 >
                   {count > 0 && (
-                    <span className="text-[9px] font-mono text-gray-600">
+                    <span className="text-[11px] text-gray-400">
                       {count.toLocaleString()}
                     </span>
                   )}
@@ -297,7 +295,7 @@ export default async function SerializationPage() {
                       title={`${count.toLocaleString()} bottles`}
                     />
                   </div>
-                  <span className="text-[9px] font-mono text-gray-600">
+                  <span className="text-[11px] text-gray-400">
                     {orderedLabels[i]}
                   </span>
                 </div>
@@ -305,13 +303,13 @@ export default async function SerializationPage() {
             })}
           </div>
           <div className="mt-3 pt-3 border-t border-gray-800/40 flex justify-between">
-            <span className="text-[10px] font-mono text-gray-600">
+            <span className="text-xs text-gray-400">
               Week total:{" "}
               {metrics.dailyThroughput
                 .reduce((s, d) => s + d.count, 0)
                 .toLocaleString()}
             </span>
-            <span className="text-[10px] font-mono text-gray-600">
+            <span className="text-xs text-gray-400">
               Peak:{" "}
               {Math.max(
                 ...metrics.dailyThroughput.map((d) => d.count)
@@ -323,14 +321,14 @@ export default async function SerializationPage() {
         {/* Recent batches */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl">
           <div className="px-4 py-3 border-b border-gray-800/60">
-            <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+            <h2 className="text-xs text-gray-400 font-medium">
               Recent Batch Generation
             </h2>
           </div>
           <div className="divide-y divide-gray-800/40">
             {metrics.recentBatches.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <p className="text-xs text-gray-600 font-mono">
+                <p className="text-xs text-gray-400">
                   No batches yet
                 </p>
               </div>
@@ -345,11 +343,11 @@ export default async function SerializationPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-gray-300">
+                        <span className="font-mono text-xs text-gray-300">
                           {batch.batchCode}
                         </span>
                         <span
-                          className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                          className={`text-[11px] px-1.5 py-0.5 rounded border ${
                             isPaired
                               ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
                               : "bg-green-500/10 text-green-400 border-green-500/20"
@@ -358,27 +356,27 @@ export default async function SerializationPage() {
                           {isPaired ? "Paired" : "Single"}
                         </span>
                         {batch.targetRegion && (
-                          <span className="text-[9px] font-mono text-gray-600 border border-gray-800 rounded px-1">
+                          <span className="text-[11px] text-gray-400 border border-gray-800 rounded px-1">
                             {batch.targetRegion}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <Building2 className="w-3 h-3 text-gray-700" />
-                        <span className="text-[10px] text-gray-600 truncate">
+                        <Building2 className="w-3 h-3 text-gray-500" />
+                        <span className="text-xs text-gray-400 truncate">
                           {batch.manufacturer.companyName}
                         </span>
-                        <span className="text-gray-700">·</span>
-                        <span className="text-[10px] text-gray-600">
+                        <span className="text-gray-500">·</span>
+                        <span className="text-xs text-gray-400">
                           {batch.product?.name ?? "No product"}
                         </span>
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-3">
-                      <p className="text-xs font-mono text-blue-400">
+                      <p className="text-xs text-blue-400">
                         {batch.bottleCount.toLocaleString()}
                       </p>
-                      <p className="text-[9px] font-mono text-gray-600">
+                      <p className="text-[11px] text-gray-400">
                         {new Date(batch.createdAt).toLocaleDateString(
                           "en-NG",
                           { day: "numeric", month: "short" }
@@ -396,11 +394,12 @@ export default async function SerializationPage() {
       {/* Manufacturer breakdown table */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/60">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs text-gray-400 font-medium">
             Serialization by Manufacturer
           </h2>
         </div>
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/40">
               {[
@@ -414,7 +413,7 @@ export default async function SerializationPage() {
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-2.5 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                  className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium"
                 >
                   {h}
                 </th>
@@ -426,7 +425,7 @@ export default async function SerializationPage() {
               <tr>
                 <td
                   colSpan={7}
-                  className="px-4 py-8 text-center text-xs text-gray-600 font-mono"
+                  className="px-4 py-8 text-center text-xs text-gray-400"
                 >
                   No active manufacturers
                 </td>
@@ -461,39 +460,39 @@ export default async function SerializationPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-500">
+                      <span className="text-xs text-gray-500">
                         {m.subscriptionPlan}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-blue-400">
+                      <span className="text-xs text-blue-400">
                         {m.totalBottlesGenerated.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-400">
+                      <span className="text-xs text-gray-400">
                         {m._count.batches.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-500">
+                      <span className="text-xs text-gray-500">
                         {m.estimatedBottlesPerMonth
                           ? m.estimatedBottlesPerMonth.toLocaleString()
-                          : "—"}
+                          : "Not given"}
                       </span>
                     </td>
                     <td className="px-4 py-3 w-40">
                       {usagePct === null ? (
-                        <span className="text-[10px] font-mono text-blue-400">
+                        <span className="text-xs text-blue-400">
                           Unlimited
                         </span>
                       ) : (
                         <div>
                           <div className="flex justify-between mb-1">
-                            <span className="text-[9px] font-mono text-gray-600">
+                            <span className="text-[11px] text-gray-400">
                               {usagePct.toFixed(1)}%
                             </span>
-                            <span className="text-[9px] font-mono text-gray-700">
+                            <span className="text-[11px] text-gray-500">
                               of {planLimit.toLocaleString()}
                             </span>
                           </div>
@@ -509,7 +508,7 @@ export default async function SerializationPage() {
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/manufacturers/${m.id}`}
-                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-blue-400 transition-colors font-mono"
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-400 transition-colors"
                       >
                         View
                         <ChevronRight className="w-3 h-3" />
@@ -521,6 +520,7 @@ export default async function SerializationPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

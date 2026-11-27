@@ -1,8 +1,7 @@
 import { getAdminSession } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
-import { NextRequest } from "next/server"
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getAdminSession()
   if (!session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
@@ -16,6 +15,15 @@ export async function GET(req: NextRequest) {
     },
   })
 
+  const resolverIds = [...new Set(alerts.map((a) => a.resolvedBy).filter((v): v is string => !!v))]
+  const resolvers = resolverIds.length
+    ? await prisma.user.findMany({ where: { id: { in: resolverIds } }, select: { id: true, name: true, email: true } })
+    : []
+  const resolverNames = new Map(resolvers.map((u) => [u.id, u.name ?? u.email ?? ""]))
+
+  // Quote every text field so commas and quotes in names do not break columns.
+  const csv = (v: string) => `"${v.replace(/"/g, '""')}"`
+
   const rows = [
     [
       "ID",
@@ -28,19 +36,23 @@ export async function GET(req: NextRequest) {
       "Confidence",
       "Resolved",
       "Created At",
+      "Resolved By",
+      "Resolved At",
     ].join(","),
     ...alerts.map((a) =>
       [
         a.id,
         a.severity,
         a.type,
-        `"${a.message.replace(/"/g, '""')}"`,
-        a.manufacturer?.companyName ?? "Platform-wide",
-        a.manufacturer?.rcNumber ?? "",
-        a.region ?? "",
+        csv(a.message),
+        csv(a.manufacturer?.companyName ?? "Platform-wide"),
+        csv(a.manufacturer?.rcNumber ?? ""),
+        csv(a.region ?? ""),
         a.confidenceScore ? Math.round(a.confidenceScore * 100) + "%" : "",
         a.resolved ? "Yes" : "No",
         new Date(a.createdAt).toISOString(),
+        csv(a.resolvedBy ? (resolverNames.get(a.resolvedBy) ?? a.resolvedBy) : ""),
+        a.resolvedAt ? new Date(a.resolvedAt).toISOString() : "",
       ].join(",")
     ),
   ].join("\n")

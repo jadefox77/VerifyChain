@@ -1,6 +1,10 @@
-import { requireAdmin, canWrite } from "@/lib/admin-auth"
+import { requireAdmin, canResolveAlerts } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
+import type { Metadata } from "next"
 import Link from "next/link"
+import type { AlertSeverity, AlertType } from "@prisma/client"
+import { ALERT_TYPE_LABELS } from "@/lib/alerts"
+import { formatDate, timeAgo } from "@/lib/format"
 import {
   Bell,
   CheckCircle2,
@@ -11,6 +15,8 @@ import {
   Clock,
 } from "lucide-react"
 
+export const metadata: Metadata = { title: "Alerts" }
+
 export const revalidate = 30
 
 const SEVERITY_CONFIG = {
@@ -18,7 +24,7 @@ const SEVERITY_CONFIG = {
     dot: "bg-green-500",
     badge: "bg-green-500/10 text-green-400 border-green-500/20",
     row: "",
-    label: "Safe",
+    label: "Informational",
   },
   SUSPICIOUS: {
     dot: "bg-yellow-500",
@@ -30,27 +36,14 @@ const SEVERITY_CONFIG = {
     dot: "bg-orange-500",
     badge: "bg-orange-500/10 text-orange-400 border-orange-500/20",
     row: "bg-orange-500/5",
-    label: "High Concern",
+    label: "High concern",
   },
   CRITICAL: {
-    dot: "bg-red-500 animate-pulse",
+    dot: "bg-red-500",
     badge: "bg-red-500/10 text-red-400 border-red-500/20",
     row: "bg-red-500/5",
     label: "Critical",
   },
-}
-
-const ALERT_TYPE_LABELS: Record<string, string> = {
-  INVALID_PAIRING: "Invalid Pairing",
-  MASS_CLONING: "Mass Cloning",
-  GEOGRAPHIC_TELEPORTATION: "Geographic Teleportation",
-  SUPPLY_CHAIN_DRIFT: "Supply Chain Drift",
-  REPEAT_SCAN_ABUSE: "Repeat Scan Abuse",
-  BOT_ACTIVITY: "Bot Activity",
-  REFILL_DETECTED: "Refill Detected",
-  PRODUCTION_PAIRING_FAIL: "Production Pairing Failure",
-  SUSPICIOUS_RETAIL_CLUSTER: "Suspicious Retail Cluster",
-  IDENTITY_EXHAUSTION: "Identity Exhaustion",
 }
 
 async function getAlerts({
@@ -71,9 +64,9 @@ async function getAlerts({
 
   const where = {
     ...(severity && severity !== "ALL"
-      ? { severity: severity as any }
+      ? { severity: severity as AlertSeverity }
       : {}),
-    ...(type && type !== "ALL" ? { type: type as any } : {}),
+    ...(type && type !== "ALL" ? { type: type as AlertType } : {}),
     ...(resolved === "true"
       ? { resolved: true }
       : resolved === "false"
@@ -99,7 +92,17 @@ async function getAlerts({
     prisma.alertLog.count({ where }),
   ])
 
-  return { alerts, total, pages: Math.ceil(total / PAGE_SIZE) }
+  // resolvedBy holds a user id; look up names to show who resolved each alert.
+  const resolverIds = [...new Set(alerts.map((a) => a.resolvedBy).filter((v): v is string => !!v))]
+  const resolvers = resolverIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: resolverIds } },
+        select: { id: true, name: true, email: true },
+      })
+    : []
+  const resolverNames = new Map(resolvers.map((u) => [u.id, u.name ?? u.email ?? "Unknown user"]))
+
+  return { alerts, total, pages: Math.ceil(total / PAGE_SIZE), resolverNames }
 }
 
 async function getFilterOptions() {
@@ -129,14 +132,6 @@ async function getAlertCounts() {
   return { critical, high, suspicious, unresolved }
 }
 
-function timeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
-}
-
 export default async function AlertsPage({
   searchParams,
 }: {
@@ -153,11 +148,12 @@ export default async function AlertsPage({
 
   const page = Math.max(1, parseInt(params.page ?? "1", 10))
 
-  const [{ alerts, total, pages }, filters, counts] = await Promise.all([
+  const [{ alerts, total, pages, resolverNames }, filters, counts] = await Promise.all([
     getAlerts({
       severity: params.severity,
       type: params.type,
-      resolved: params.resolved,
+      // Default to open alerts, matching the filter's default option
+      resolved: params.resolved ?? "false",
       manufacturerId: params.manufacturerId,
       page,
     }),
@@ -165,7 +161,7 @@ export default async function AlertsPage({
     getAlertCounts(),
   ])
 
-  const canResolve = canWrite(session.user.role)
+  const canResolve = canResolveAlerts(session.user.role)
 
   // Build query string helper for pagination
   const buildQuery = (overrides: Record<string, string>) => {
@@ -182,22 +178,22 @@ export default async function AlertsPage({
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-white tracking-tight">
-            Live Alert Feed
+            Alerts
           </h1>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">
-            {counts.unresolved} unresolved · {total} matching current filters
+          <p className="text-xs text-gray-500 mt-0.5">
+            {counts.unresolved} open · {total} matching these filters
           </p>
         </div>
 
         {/* Export button */}
         <a
           href="/api/admin/alerts/export"
-          className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-mono hover:bg-gray-700 transition-colors border border-gray-700"
+          className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs hover:bg-gray-700 transition-colors border border-gray-700"
         >
           <Download className="w-3.5 h-3.5" />
           Export CSV
@@ -215,7 +211,7 @@ export default async function AlertsPage({
             bg: "bg-red-500/5",
           },
           {
-            label: "High Concern",
+            label: "High concern",
             value: counts.high,
             style: "text-orange-400",
             border: "border-orange-500/20",
@@ -229,7 +225,7 @@ export default async function AlertsPage({
             bg: "bg-yellow-500/5",
           },
           {
-            label: "Total Unresolved",
+            label: "All open",
             value: counts.unresolved,
             style: "text-white",
             border: "border-gray-700",
@@ -240,10 +236,10 @@ export default async function AlertsPage({
             key={card.label}
             className={`border rounded-xl p-4 ${card.border} ${card.bg}`}
           >
-            <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-1">
+            <p className="text-xs text-gray-500 mb-1 font-medium">
               {card.label}
             </p>
-            <p className={`text-2xl font-bold font-mono ${card.style}`}>
+            <p className={`text-2xl font-bold tabular-nums ${card.style}`}>
               {card.value}
             </p>
           </div>
@@ -256,29 +252,29 @@ export default async function AlertsPage({
         action="/admin/alerts"
         className="flex flex-wrap items-center gap-3"
       >
-        <div className="flex items-center gap-1.5 text-xs font-mono text-gray-600">
+        <div className="flex items-center gap-1.5 text-xs text-gray-400">
           <Filter className="w-3.5 h-3.5" />
-          Filters:
+          Filter
         </div>
 
         <select
           name="severity"
           defaultValue={params.severity ?? "ALL"}
-          className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-400 font-mono focus:outline-none focus:border-gray-700"
+          className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:border-gray-700"
         >
-          <option value="ALL">All Severities</option>
+          <option value="ALL">All severities</option>
           <option value="CRITICAL">Critical</option>
-          <option value="HIGH_CONCERN">High Concern</option>
+          <option value="HIGH_CONCERN">High concern</option>
           <option value="SUSPICIOUS">Suspicious</option>
-          <option value="SAFE">Safe</option>
+          <option value="SAFE">Informational</option>
         </select>
 
         <select
           name="type"
           defaultValue={params.type ?? "ALL"}
-          className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-400 font-mono focus:outline-none focus:border-gray-700"
+          className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:border-gray-700"
         >
-          <option value="ALL">All Types</option>
+          <option value="ALL">All types</option>
           {Object.entries(ALERT_TYPE_LABELS).map(([key, label]) => (
             <option key={key} value={key}>
               {label}
@@ -289,9 +285,9 @@ export default async function AlertsPage({
         <select
           name="resolved"
           defaultValue={params.resolved ?? "false"}
-          className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-400 font-mono focus:outline-none focus:border-gray-700"
+          className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:border-gray-700"
         >
-          <option value="false">Unresolved</option>
+          <option value="false">Open</option>
           <option value="true">Resolved</option>
           <option value="">All</option>
         </select>
@@ -299,9 +295,9 @@ export default async function AlertsPage({
         <select
           name="manufacturerId"
           defaultValue={params.manufacturerId ?? "ALL"}
-          className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-400 font-mono focus:outline-none focus:border-gray-700"
+          className="bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:border-gray-700"
         >
-          <option value="ALL">All Manufacturers</option>
+          <option value="ALL">All manufacturers</option>
           {filters.manufacturers.map((m) => (
             <option key={m.id} value={m.id}>
               {m.companyName}
@@ -311,14 +307,14 @@ export default async function AlertsPage({
 
         <button
           type="submit"
-          className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-mono hover:bg-gray-700 transition-colors"
+          className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs hover:bg-gray-700 transition-colors"
         >
           Apply
         </button>
 
         <Link
           href="/admin/alerts"
-          className="px-3 py-1.5 text-gray-600 rounded-lg text-xs font-mono hover:text-gray-400 transition-colors"
+          className="px-3 py-1.5 text-gray-400 rounded-lg text-xs hover:text-gray-200 transition-colors"
         >
           Clear
         </Link>
@@ -326,7 +322,8 @@ export default async function AlertsPage({
 
       {/* Alert table */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/60">
               {[
@@ -336,12 +333,12 @@ export default async function AlertsPage({
                 "Manufacturer",
                 "Location",
                 "Confidence",
-                "Time",
-                "",
+                "Raised",
+                "Action",
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-3 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs text-gray-400 font-medium"
                 >
                   {h}
                 </th>
@@ -355,9 +352,9 @@ export default async function AlertsPage({
                   colSpan={8}
                   className="px-4 py-12 text-center"
                 >
-                  <Bell className="w-6 h-6 text-gray-700 mx-auto mb-2" />
-                  <p className="text-xs text-gray-600 font-mono">
-                    No alerts match current filters
+                  <Bell className="w-6 h-6 text-gray-500 mx-auto mb-2" />
+                  <p className="text-xs text-gray-400">
+                    No alerts match these filters
                   </p>
                 </td>
               </tr>
@@ -376,7 +373,7 @@ export default async function AlertsPage({
                           className={`w-1.5 h-1.5 rounded-full shrink-0 ${config.dot}`}
                         />
                         <span
-                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap ${config.badge}`}
+                          className={`text-xs px-1.5 py-0.5 rounded border whitespace-nowrap ${config.badge}`}
                         >
                           {config.label}
                         </span>
@@ -385,7 +382,7 @@ export default async function AlertsPage({
 
                     {/* Type */}
                     <td className="px-4 py-3">
-                      <span className="text-[10px] font-mono text-gray-500 whitespace-nowrap">
+                      <span className="text-xs text-gray-500 whitespace-nowrap">
                         {ALERT_TYPE_LABELS[alert.type] ?? alert.type}
                       </span>
                     </td>
@@ -396,7 +393,7 @@ export default async function AlertsPage({
                         {alert.message}
                       </p>
                       {alert.detail && (
-                        <p className="text-[10px] text-gray-600 mt-0.5 line-clamp-1">
+                        <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">
                           {alert.detail}
                         </p>
                       )}
@@ -413,8 +410,8 @@ export default async function AlertsPage({
                           {alert.manufacturer.companyName}
                         </Link>
                       ) : (
-                        <span className="text-xs text-gray-600 font-mono">
-                          Platform-wide
+                        <span className="text-xs text-gray-400">
+                          All manufacturers
                         </span>
                       )}
                     </td>
@@ -427,24 +424,24 @@ export default async function AlertsPage({
                           {alert.region}
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-700">—</span>
+                        <span className="text-xs text-gray-500">None</span>
                       )}
                     </td>
 
                     {/* Confidence */}
                     <td className="px-4 py-3">
                       {alert.confidenceScore ? (
-                        <span className="text-xs font-mono text-gray-400">
+                        <span className="text-xs text-gray-400">
                           {Math.round(alert.confidenceScore * 100)}%
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-700">—</span>
+                        <span className="text-xs text-gray-500">None</span>
                       )}
                     </td>
 
                     {/* Time */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 text-[10px] font-mono text-gray-600 whitespace-nowrap">
+                      <div className="flex items-center gap-1 text-xs text-gray-400 whitespace-nowrap">
                         <Clock className="w-3 h-3" />
                         {timeAgo(alert.createdAt)}
                       </div>
@@ -459,7 +456,7 @@ export default async function AlertsPage({
                         >
                           <button
                             type="submit"
-                            className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-colors whitespace-nowrap"
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-colors whitespace-nowrap"
                           >
                             <CheckCircle2 className="w-3 h-3" />
                             Resolve
@@ -467,9 +464,17 @@ export default async function AlertsPage({
                         </form>
                       )}
                       {alert.resolved && (
-                        <span className="text-[10px] font-mono text-gray-600">
-                          Resolved
-                        </span>
+                        <div className="text-xs text-gray-400">
+                          <p className="text-gray-300">
+                            Resolved by{" "}
+                            {(alert.resolvedBy && resolverNames.get(alert.resolvedBy)) ?? "an unknown user"}
+                          </p>
+                          {alert.resolvedAt && (
+                            <p className="mt-0.5 whitespace-nowrap" title={formatDate(alert.resolvedAt, true)}>
+                              {timeAgo(alert.resolvedAt)}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -478,18 +483,19 @@ export default async function AlertsPage({
             )}
           </tbody>
         </table>
+        </div>
 
         {/* Pagination */}
         {pages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-800/60">
-            <span className="text-[11px] font-mono text-gray-600">
+            <span className="text-[11px] text-gray-400">
               Page {page} of {pages} · {total} total alerts
             </span>
             <div className="flex items-center gap-2">
               {page > 1 && (
                 <Link
                   href={`/admin/alerts?${buildQuery({ page: String(page - 1) })}`}
-                  className="px-3 py-1 text-xs font-mono bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
+                  className="px-3 py-1 text-xs bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
                 >
                   Previous
                 </Link>
@@ -497,7 +503,7 @@ export default async function AlertsPage({
               {page < pages && (
                 <Link
                   href={`/admin/alerts?${buildQuery({ page: String(page + 1) })}`}
-                  className="px-3 py-1 text-xs font-mono bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
+                  className="px-3 py-1 text-xs bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
                 >
                   Next
                 </Link>

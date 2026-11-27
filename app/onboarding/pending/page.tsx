@@ -1,39 +1,45 @@
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
+import { Check } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { redirect } from "next/navigation"
-import { Clock, CheckCircle2, Circle } from "lucide-react"
 import { handleSignOut } from "@/lib/actions/auth"
+import { AuthCard, AuthShell, Notice } from "@/components/ui/auth-shell"
+import { formatDate } from "@/lib/format"
 
-const STAGE_LABELS: Record<string, string> = {
-  PENDING_REVIEW: "Pending Review",
-  COMPLIANCE_VERIFICATION: "Compliance Verification",
-  TECHNICAL_INTEGRATION: "Technical Integration",
-  PILOT_APPROVAL: "Pilot Approval",
-  ACTIVE_PRODUCTION: "Active Production",
-  REJECTED: "Application Rejected",
-  SUSPENDED: "Account Suspended",
+export const metadata: Metadata = {
+  title: "Application status",
 }
 
-const STAGE_ORDER = [
-  "PENDING_REVIEW",
-  "COMPLIANCE_VERIFICATION",
-  "TECHNICAL_INTEGRATION",
-  "PILOT_APPROVAL",
-  "ACTIVE_PRODUCTION",
+const STAGES = [
+  {
+    key: "PENDING_REVIEW",
+    label: "Application received",
+    description: "Our team is reviewing the details you submitted.",
+  },
+  {
+    key: "COMPLIANCE_VERIFICATION",
+    label: "Compliance check",
+    description: "We are confirming your CAC registration and NAFDAC numbers.",
+  },
+  {
+    key: "TECHNICAL_INTEGRATION",
+    label: "Account setup",
+    description: "We are setting up your account and any factory scanner access. Our team may contact your technical lead.",
+  },
+  {
+    key: "PILOT_APPROVAL",
+    label: "Pilot batch",
+    description: "A test batch is being run to confirm printing and scanning work on your line.",
+  },
+  {
+    key: "ACTIVE_PRODUCTION",
+    label: "Live",
+    description: "Your dashboard is open.",
+  },
 ]
 
-const STAGE_DESCRIPTIONS: Record<string, string> = {
-  PENDING_REVIEW:
-    "Your application has been received and is awaiting review by the VerifyChain team.",
-  COMPLIANCE_VERIFICATION:
-    "We are verifying your RC number and NAFDAC registrations.",
-  TECHNICAL_INTEGRATION:
-    "Your API access is being configured. Our technical team may contact you.",
-  PILOT_APPROVAL:
-    "A test batch is running. We are validating your integration before full activation.",
-  ACTIVE_PRODUCTION:
-    "Your account is fully active. You can now access your dashboard.",
-}
+const SUPPORT = "support@verifychain.africa"
 
 export default async function OnboardingPendingPage() {
   const session = await auth()
@@ -41,150 +47,106 @@ export default async function OnboardingPendingPage() {
 
   const manufacturer = await prisma.manufacturer.findUnique({
     where: { userId: session.user.id },
-    select: {
-      companyName: true,
-      onboardingStatus: true,
-      createdAt: true,
-    },
+    select: { companyName: true, onboardingStatus: true, createdAt: true },
   })
 
   if (!manufacturer) redirect("/onboarding")
-  if (manufacturer.onboardingStatus === "ACTIVE_PRODUCTION") {
-    redirect("/dashboard")
-  }
-
-  const currentStageIndex = STAGE_ORDER.indexOf(
-    manufacturer.onboardingStatus
-  )
+  if (manufacturer.onboardingStatus === "ACTIVE_PRODUCTION") redirect("/dashboard")
 
   const isRejected = manufacturer.onboardingStatus === "REJECTED"
   const isSuspended = manufacturer.onboardingStatus === "SUSPENDED"
+  const current = STAGES.findIndex((s) => s.key === manufacturer.onboardingStatus)
 
   return (
-    <main className="min-h-screen bg-gray-950 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
-            <Clock className="w-5 h-5 text-blue-400" />
-          </div>
-          <h1 className="text-xl font-bold text-white">
-            Application In Progress
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {manufacturer.companyName}
-          </p>
-        </div>
+    <AuthShell
+      width="md"
+      footer={
+        <form action={handleSignOut}>
+          <button type="submit" className="underline underline-offset-2 hover:text-gray-700 dark:hover:text-gray-200">
+            Sign out or use a different account
+          </button>
+        </form>
+      }
+    >
+      <AuthCard>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{manufacturer.companyName}</p>
+        <h1 className="mt-1 text-xl font-semibold tracking-tight text-gray-900 dark:text-white">
+          {isRejected
+            ? "Your application was not approved"
+            : isSuspended
+              ? "Your account is suspended"
+              : "Your application is in review"}
+        </h1>
 
-        {/* Rejected or suspended */}
-        {(isRejected || isSuspended) && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
-            <p className="text-sm font-semibold text-red-400">
+        {isRejected || isSuspended ? (
+          <div className="mt-5">
+            <Notice tone="error">
               {isRejected
-                ? "Application Rejected"
-                : "Account Suspended"}
-            </p>
-            <p className="text-xs text-red-400/70 mt-1">
-              Please contact{" "}
-              <a
-                href="mailto:support@verifychain.africa"
-                className="underline"
-              >
-                support@verifychain.africa
+                ? "We were not able to approve this application. "
+                : "Access to your dashboard has been paused. "}
+              Email{" "}
+              <a href={`mailto:${SUPPORT}`} className="font-medium underline underline-offset-2">
+                {SUPPORT}
               </a>{" "}
-              for more information.
-            </p>
+              and we will explain the next steps.
+            </Notice>
           </div>
-        )}
-
-        {/* Progress stages */}
-        {!isRejected && !isSuspended && (
-          <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-5 space-y-4">
-            <h2 className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-              Onboarding Progress
-            </h2>
-            <div className="space-y-3">
-              {STAGE_ORDER.map((stage, i) => {
-                const isDone = i < currentStageIndex
-                const isCurrent = i === currentStageIndex
-
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Submitted on {formatDate(manufacturer.createdAt)}. This page updates
+              as your application moves through each stage.
+            </p>
+            <ol className="mt-6 space-y-0">
+              {STAGES.map((stage, i) => {
+                const done = i < current
+                const active = i === current
                 return (
-                  <div key={stage} className="flex items-start gap-3">
-                    <div className="shrink-0 mt-0.5">
-                      {isDone ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-400" />
-                      ) : isCurrent ? (
-                        <div className="w-4 h-4 rounded-full border-2 border-blue-400 flex items-center justify-center">
-                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                        </div>
-                      ) : (
-                        <Circle className="w-4 h-4 text-gray-700" />
-                      )}
-                    </div>
-                    <div>
+                  <li key={stage.key} className="relative flex gap-3 pb-5 last:pb-0" aria-current={active ? "step" : undefined}>
+                    {i < STAGES.length - 1 && (
+                      <span
+                        className={`absolute left-[11px] top-6 h-[calc(100%-1.5rem)] w-px ${
+                          done ? "bg-brand-500" : "bg-gray-200 dark:bg-gray-800"
+                        }`}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span
+                      className={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                        done
+                          ? "bg-brand-600 text-white dark:bg-brand-500 dark:text-gray-950"
+                          : active
+                            ? "border-2 border-brand-600 bg-white text-brand-700 dark:border-brand-400 dark:bg-gray-900 dark:text-brand-300"
+                            : "border border-gray-300 bg-white text-gray-400 dark:border-gray-700 dark:bg-gray-900"
+                      }`}
+                    >
+                      {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : i + 1}
+                    </span>
+                    <div className="pt-0.5">
                       <p
                         className={`text-sm font-medium ${
-                          isDone
-                            ? "text-green-400"
-                            : isCurrent
-                            ? "text-blue-400"
-                            : "text-gray-600"
+                          active ? "text-gray-900 dark:text-white" : done ? "text-gray-700 dark:text-gray-300" : "text-gray-500 dark:text-gray-400"
                         }`}
                       >
-                        {STAGE_LABELS[stage]}
+                        {stage.label}
+                        {active && <span className="sr-only"> (current stage)</span>}
                       </p>
-                      {isCurrent && (
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {STAGE_DESCRIPTIONS[stage]}
-                        </p>
-                      )}
+                      {active && <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">{stage.description}</p>}
                     </div>
-                  </div>
+                  </li>
                 )
               })}
-            </div>
-          </div>
+            </ol>
+            <p className="mt-6 border-t border-gray-200 pt-4 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-400">
+              Questions about your application? Email{" "}
+              <a href={`mailto:${SUPPORT}`} className="font-medium text-brand-700 underline underline-offset-2 dark:text-brand-400">
+                {SUPPORT}
+              </a>
+              .
+            </p>
+          </>
         )}
-
-        {/* Info + sign out */}
-        <div className="text-center space-y-2">
-          {!isRejected && !isSuspended && (
-            <>
-              <p className="text-xs text-gray-600">
-                Submitted{" "}
-                {new Date(manufacturer.createdAt).toLocaleDateString(
-                  "en-NG",
-                  {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  }
-                )}
-              </p>
-              <p className="text-xs text-gray-600">
-                Questions?{" "}
-                <a
-                  href="mailto:support@verifychain.africa"
-                  className="text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  support@verifychain.africa
-                </a>
-              </p>
-            </>
-          )}
-
-          <div className="pt-4 border-t border-gray-800/60">
-            <form action={handleSignOut}>
-              <button
-                type="submit"
-                className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
-              >
-                Sign out and use a different account
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </main>
+      </AuthCard>
+    </AuthShell>
   )
 }

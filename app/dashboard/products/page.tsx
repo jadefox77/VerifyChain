@@ -1,6 +1,30 @@
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
+import { Package } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { redirect } from "next/navigation"
+import { PageHeader } from "@/components/ui/page-header"
+import { Badge } from "@/components/ui/badge"
+import { EmptyState } from "@/components/ui/empty-state"
+import { SubmitButton } from "@/components/ui/submit-button"
+import { buttonPrimary, card, cardHeader, cardTitle, fieldLabel, inputBase } from "@/lib/ui"
+
+export const metadata: Metadata = { title: "Products" }
+
+const CATEGORIES = [
+  { value: "Beer", label: "Beer" },
+  { value: "Water", label: "Bottled water" },
+  { value: "Soft Drink", label: "Soft drink" },
+  { value: "Energy Drink", label: "Energy drink" },
+  { value: "Juice", label: "Juice" },
+  { value: "Sachet", label: "Sachet" },
+  { value: "Can", label: "Can" },
+  { value: "Carton", label: "Carton" },
+  { value: "Pouch", label: "Pouch" },
+  { value: "Other", label: "Other" },
+]
+
+const categoryLabel = (v: string | null) => CATEGORIES.find((c) => c.value === v)?.label ?? v ?? "Uncategorised"
 
 export default async function ProductsPage() {
   const session = await auth()
@@ -14,174 +38,131 @@ export default async function ProductsPage() {
   const products = await prisma.product.findMany({
     where: { manufacturerId: manufacturer.id },
     orderBy: { createdAt: "desc" },
+    include: { _count: { select: { batches: true } } },
   })
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-2xl font-bold dark:text-white">Products</h2>
-          <p className="text-gray-500 text-sm mt-1">
-            Manage your product lines. Each batch is tied to a product.
-          </p>
-        </div>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Products"
+        description="Each batch of codes belongs to a product. Choose how a product is verified when you add it."
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Create product form */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">
-          <h3 className="text-base font-semibold dark:text-white mb-5">
-            Add New Product
-          </h3>
-          <form action={createProduct} className="flex flex-col gap-4">
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="name" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Product Name
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_1fr]">
+        <section className={card} aria-labelledby="add-product">
+          <div className={cardHeader}>
+            <h2 id="add-product" className={cardTitle}>
+              Add a product
+            </h2>
+          </div>
+          <form action={createProduct} className="space-y-5 p-5">
+            <div className="space-y-1.5">
+              <label htmlFor="name" className={fieldLabel}>
+                Product name
               </label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                placeholder="e.g. Malta Gold 60cl"
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
-              />
+              <input id="name" name="name" type="text" required maxLength={120} placeholder="e.g. Premium Malt 60cl" className={inputBase} />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="category" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <div className="space-y-1.5">
+              <label htmlFor="category" className={fieldLabel}>
                 Category
               </label>
-              <select
-                id="category"
-                name="category"
-                required
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
-              >
-                <option value="">Select a category</option>
-                <option value="Beer">Beer</option>
-                <option value="Water">Bottled Water</option>
-                <option value="Soft Drink">Soft Drink</option>
-                <option value="Energy Drink">Energy Drink</option>
-                <option value="Juice">Juice</option>
-                <option value="Sachet">Sachet</option>
-                <option value="Can">Can</option>
-                <option value="Carton">Carton</option>
-                <option value="Pouch">Pouch</option>
-                <option value="Other">Other</option>
+              <select id="category" name="category" required defaultValue="" className={inputBase}>
+                <option value="" disabled>
+                  Choose a category
+                </option>
+                {CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* Auth Mode — core new field */}
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="authMode" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Authentication Mode
-              </label>
-              <select
-                id="authMode"
-                name="authMode"
-                defaultValue="PAIRED"
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1"
-              >
-                <option value="PAIRED">
-                  Paired — Bottle QR + Hidden Cap QR
-                </option>
-                <option value="SINGLE">
-                  Single — One QR per unit
-                </option>
-              </select>
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Paired Mode
-                  </p>
-                  <p className="text-[10px] text-gray-500 leading-relaxed">
-                    Bottles, jars, spirits. Detects refill fraud via hidden cap scan. Consumer scans twice.
-                  </p>
-                </div>
-                <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Single Mode
-                  </p>
-                  <p className="text-[10px] text-gray-500 leading-relaxed">
-                    Cans, sachets, cartons, pouches. Instant one-scan verification. No cap required.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="description" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Description{" "}
-                <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                rows={3}
-                placeholder="Brief description of the product"
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900 focus:ring-offset-1 resize-none"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="mt-1 w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-700 active:scale-95"
-            >
-              Add Product
-            </button>
-          </form>
-        </div>
-
-        {/* Product list */}
-        <div className="flex flex-col gap-3">
-          {products.length === 0 ? (
-            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center">
-              <p className="text-gray-500 text-sm">
-                No products yet. Add your first one.
-              </p>
-            </div>
-          ) : (
-            products.map((product) => {
-              const isPaired = product.authMode === "PAIRED"
-              return (
-                <div
-                  key={product.id}
-                  className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm px-5 py-4 flex items-start justify-between gap-4"
+            <fieldset className="space-y-2">
+              <legend className={fieldLabel}>How shoppers verify it</legend>
+              {[
+                {
+                  value: "PAIRED",
+                  title: "Two codes: label and cap",
+                  body: "For bottles, jars and spirits. Shoppers scan the label, then the code inside the cap, which catches refilled bottles.",
+                },
+                {
+                  value: "SINGLE",
+                  title: "One code",
+                  body: "For cans, sachets, cartons and pouches. One scan, and each code can be confirmed as genuine once.",
+                },
+              ].map((opt) => (
+                <label
+                  key={opt.value}
+                  className="flex cursor-pointer gap-3 rounded-lg border border-gray-300 p-3.5 transition-colors has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/60 dark:border-gray-700 dark:has-[:checked]:border-brand-400 dark:has-[:checked]:bg-brand-500/10"
                 >
+                  <input
+                    type="radio"
+                    name="authMode"
+                    value={opt.value}
+                    defaultChecked={opt.value === "PAIRED"}
+                    className="mt-0.5 h-4 w-4 accent-brand-600"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-900 dark:text-white">{opt.title}</span>
+                    <span className="mt-0.5 block text-sm text-gray-600 dark:text-gray-400">{opt.body}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+
+            <div className="space-y-1.5">
+              <label htmlFor="description" className={fieldLabel}>
+                Description <span className="font-normal text-gray-500 dark:text-gray-400">(optional)</span>
+              </label>
+              <textarea id="description" name="description" rows={3} maxLength={500} className={`${inputBase} resize-y`} />
+            </div>
+
+            <SubmitButton className={`${buttonPrimary} w-full`} pendingLabel="Adding product">
+              Add product
+            </SubmitButton>
+          </form>
+        </section>
+
+        <section className={card} aria-labelledby="product-list">
+          <div className={cardHeader}>
+            <h2 id="product-list" className={cardTitle}>
+              Your products
+            </h2>
+            <span className="text-xs text-gray-500 dark:text-gray-400">{products.length} total</span>
+          </div>
+          {products.length === 0 ? (
+            <EmptyState
+              icon={Package}
+              title="No products yet"
+              description="Add your first product to start generating batches of codes."
+            />
+          ) : (
+            <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+              {products.map((product) => (
+                <li key={product.id} className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {product.name}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {product.category}
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{product.name}</p>
+                    <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
+                      {categoryLabel(product.category)} · {product._count.batches}{" "}
+                      {product._count.batches === 1 ? "batch" : "batches"}
                     </p>
                     {product.description && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        {product.description}
-                      </p>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{product.description}</p>
                     )}
-                    <div className="flex items-center gap-2 mt-2">
-                      <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                          isPaired
-                            ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20"
-                            : "bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-500/20"
-                        }`}
-                      >
-                        {isPaired ? "Paired Auth" : "Single Auth"}
-                      </span>
-                    </div>
                   </div>
-                  <span className="shrink-0 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full px-2.5 py-1 font-medium">
-                    {product.category}
-                  </span>
-                </div>
-              )
-            })
+                  <div className="flex shrink-0 gap-2">
+                    <Badge tone={product.authMode === "PAIRED" ? "info" : "violet"}>
+                      {product.authMode === "PAIRED" ? "Label and cap" : "Single code"}
+                    </Badge>
+                    {!product.active && <Badge>Inactive</Badge>}
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
+        </section>
       </div>
     </div>
   )
@@ -197,21 +178,22 @@ async function createProduct(formData: FormData) {
     where: { userId: session.user.id },
   })
   if (!manufacturer) redirect("/onboarding")
+  if (manufacturer.onboardingStatus !== "ACTIVE_PRODUCTION") redirect("/onboarding/pending")
 
-  const name = formData.get("name") as string
-  const category = formData.get("category") as string
-  const description = formData.get("description") as string
-  const authMode = (formData.get("authMode") as string) ?? "PAIRED"
+  const name = String(formData.get("name") ?? "").trim()
+  const category = String(formData.get("category") ?? "")
+  const description = String(formData.get("description") ?? "").trim()
+  const authMode = formData.get("authMode") === "SINGLE" ? "SINGLE" : "PAIRED"
 
   if (!name || !category) return
 
   await prisma.product.create({
     data: {
       manufacturerId: manufacturer.id,
-      name,
+      name: name.slice(0, 120),
       category,
-      description: description || null,
-      authMode: authMode as "PAIRED" | "SINGLE",
+      description: description ? description.slice(0, 500) : null,
+      authMode,
     },
   })
 

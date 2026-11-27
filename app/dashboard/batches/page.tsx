@@ -1,12 +1,29 @@
+import type { Metadata } from "next"
+import Link from "next/link"
+import { redirect } from "next/navigation"
+import { Boxes, ChevronRight } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { redirect } from "next/navigation"
-import Link from "next/link"
-import { Package, ChevronRight } from "lucide-react"
 import { BatchForm } from "@/components/dashboard/batch-form"
+import { PageHeader } from "@/components/ui/page-header"
+import { Badge } from "@/components/ui/badge"
+import { EmptyState } from "@/components/ui/empty-state"
+import { buttonPrimary, card, cardHeader, cardTitle } from "@/lib/ui"
+import { formatDate } from "@/lib/format"
+import { NIGERIAN_STATES } from "@/lib/nigeria"
+import { getMonthlyUsage } from "@/lib/plans"
+import { UsageNotice } from "@/components/dashboard/usage-notice"
+import { Notice } from "@/components/ui/auth-shell"
 
+export const metadata: Metadata = { title: "Batches" }
 
-export default async function BatchesPage() {
+const regionLabel = (r: string) => NIGERIAN_STATES.find((s) => s.value === r)?.label ?? r
+
+export default async function BatchesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
@@ -15,10 +32,14 @@ export default async function BatchesPage() {
   })
   if (!manufacturer) redirect("/onboarding")
 
-  const [products, batches] = await Promise.all([
+  const { error } = await searchParams
+
+  const [usage, products, batches] = await Promise.all([
+    getMonthlyUsage(manufacturer.id, manufacturer.subscriptionPlan),
     prisma.product.findMany({
       where: { manufacturerId: manufacturer.id, active: true },
       orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, authMode: true },
     }),
     prisma.batch.findMany({
       where: { manufacturerId: manufacturer.id },
@@ -30,111 +51,93 @@ export default async function BatchesPage() {
     }),
   ])
 
-  const NIGERIAN_STATES = [
-    "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa",
-    "Benue", "Borno", "Cross River", "Delta", "Ebonyi", "Edo",
-    "Ekiti", "Enugu", "FCT — Abuja", "Gombe", "Imo", "Jigawa",
-    "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara",
-    "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun",
-    "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
-  ]
-
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Batches
-        </h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Generate serialized batches for each product run.
-        </p>
-      </div>
+      <PageHeader
+        title="Batches"
+        description="A batch is one production run. Generating a batch creates a unique code for every unit, ready to download and print."
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Generate batch form */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-5">
-            Generate New Batch
-          </h3>
+      {error === "limit" && usage.state !== "over" && (
+        <Notice tone="error">That batch could not be generated because this month&apos;s allowance was used up.</Notice>
+      )}
+      <UsageNotice usage={usage} />
 
-          {products.length === 0 ? (
-  <div className="text-center py-8">
-    <p className="text-sm text-gray-500 mb-3">
-      No products yet. Create a product first.
-    </p>
-    <Link
-      href="/dashboard/products"
-      className="text-sm text-blue-500 hover:underline"
-    >
-      Go to Products →
-    </Link>
-  </div>
-) : (
-  <BatchForm products={products} />
-)}
-        </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_1fr]">
+        <section className={card} aria-labelledby="new-batch">
+          <div className={cardHeader}>
+            <h2 id="new-batch" className={cardTitle}>
+              Generate a batch
+            </h2>
+          </div>
+          <div className="p-5">
+            {products.length === 0 ? (
+              <EmptyState
+                className="py-6"
+                title="Add a product first"
+                description="Every batch belongs to a product, so you need at least one before generating codes."
+                action={
+                  <Link href="/dashboard/products" className={buttonPrimary}>
+                    Add a product
+                  </Link>
+                }
+              />
+            ) : (
+              <BatchForm
+                products={products}
+                blocked={usage.state === "over"}
+                remaining={usage.state === "near" ? usage.remaining : null}
+              />
+            )}
+          </div>
+        </section>
 
-        {/* Batch list */}
-        <div className="flex flex-col gap-3 max-h-[600px] overflow-y-auto pr-1">
+        <section className={card} aria-labelledby="batch-list">
+          <div className={cardHeader}>
+            <h2 id="batch-list" className={cardTitle}>
+              Your batches
+            </h2>
+            <span className="text-xs text-gray-500 dark:text-gray-400">{batches.length} total</span>
+          </div>
           {batches.length === 0 ? (
-            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center">
-              <p className="text-gray-500 text-sm">
-                No batches yet. Generate your first one.
-              </p>
-            </div>
+            <EmptyState
+              icon={Boxes}
+              title="No batches yet"
+              description="Your batches will appear here once you generate the first one."
+            />
           ) : (
-            batches.map((batch) => {
-              const isPaired = batch.product?.authMode === "PAIRED"
-              return (
-                <Link
-                  key={batch.id}
-                  href={`/dashboard/batches/${batch.id}`}
-                  className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm px-5 py-4 flex items-center justify-between gap-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-mono font-semibold text-gray-900 dark:text-white truncate">
-                        {batch.batchCode}
-                      </p>
-                      <span
-                        className={`shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded border ${
-                          isPaired
-                            ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20"
-                            : "bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-500/20"
-                        }`}
-                      >
-                        {isPaired ? "Paired" : "Single"}
-                      </span>
-                      {(batch as any).generationMode === "UNPAIRED" && (
-  <span className="shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded border bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-500/20">
-    Unpaired
-  </span>
-)}
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      {batch.product?.name ?? "No product"} ·{" "}
-                      {batch._count.bottles.toLocaleString()} bottles
-                      {batch.targetRegion
-                        ? ` · ${batch.targetRegion}`
-                        : ""}
-                    </p>
-                    <p className="text-[10px] text-gray-400 font-mono mt-1">
-                      {new Date(batch.createdAt).toLocaleDateString(
-                        "en-NG",
-                        {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        }
-                      )}
-                    </p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
-                </Link>
-              )
-            })
+            <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+              {batches.map((batch) => {
+                const isPaired = batch.product?.authMode === "PAIRED"
+                return (
+                  <li key={batch.id}>
+                    <Link
+                      href={`/dashboard/batches/${batch.id}`}
+                      className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                          {batch.product?.name ?? "No product"}
+                        </p>
+                        <p className="mt-0.5 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                          {batch.batchCode}
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                          <Badge tone={isPaired ? "info" : "violet"}>{isPaired ? "Label and cap" : "Single code"}</Badge>
+                          {batch.generationMode === "UNPAIRED" && <Badge tone="warn">Caps matched on line</Badge>}
+                          <span>{batch._count.bottles.toLocaleString()} units</span>
+                          {batch.targetRegion && <span>· {regionLabel(batch.targetRegion)}</span>}
+                          <span>· {formatDate(batch.createdAt)}</span>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
           )}
-        </div>
+        </section>
       </div>
     </div>
   )

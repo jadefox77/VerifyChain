@@ -4,7 +4,7 @@ import { NextRequest } from "next/server"
 
 export const maxDuration = 10
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   const session = await getAdminSession()
   if (!session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })

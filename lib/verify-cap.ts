@@ -68,14 +68,15 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
   if (!cap) {
     return {
       status: "NOT_FOUND",
-      message: "This cap code was not found. The product may be counterfeit.",
+      message: "We could not find this cap code in our records. The product may not be genuine.",
     }
   }
 
   if (!cap.bottle || !cap.bottleId) {
     return {
       status: "FLAGGED",
-      message: "This cap has not been paired to a bottle yet.",
+      message:
+        "This cap has not been linked to a bottle at the factory yet, so it cannot be checked. If you bought the product sealed, contact the manufacturer.",
       reason: "UNPAIRED_CAP",
     }
   }
@@ -101,7 +102,7 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
       },
     })
 
-  // ── Pairing check: the cap must belong to the bottle that was scanned ─────
+  // Pairing check: the cap must belong to the bottle that was scanned
   if (bottleSerialId && bottle.serialId !== bottleSerialId) {
     await logScan(true, "Cap and bottle identity mismatch")
     await prisma.cap.update({ where: { id: cap.id }, data: { status: "FLAGGED" } })
@@ -109,11 +110,11 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
     return {
       status: "MISMATCH",
       message:
-        "The cap does not match this bottle. The bottle may have been refilled. Do not consume.",
+        "This cap does not belong to the bottle you scanned. The bottle may have been refilled. Do not consume it.",
     }
   }
 
-  // ── Supply chain drift ────────────────────────────────────────────────────
+  // Supply chain drift
   let driftReason: string | null = null
   const target = bottle.batch.targetRegion
   if (hasCoords(lat, lng) && target && REGION_COORDS[target]) {
@@ -124,7 +125,7 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
     }
   }
 
-  // ── Atomic first-open claim ───────────────────────────────────────────────
+  // Atomic first-open claim
   // Only one request can move the cap out of SEALED. If two people scan the
   // same cap at the same moment, the second one sees count === 0.
   const now = new Date()
@@ -148,7 +149,8 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
     })
     return {
       status: "WARNING",
-      message: "This cap was already opened previously.",
+      message:
+        "This cap has already been opened and scanned. If you have just opened the product yourself, it may have been refilled.",
       firstOpened: fresh?.openedAt ?? cap.openedAt ?? now,
       firstLocation: null,
     }
@@ -161,13 +163,18 @@ export async function verifyCap(input: CapVerifyInput): Promise<CapVerifyResult>
   })
 
   if (driftReason) {
-    return { status: "FLAGGED", message: `Fraud detected. ${driftReason}`, reason: driftReason }
+    return {
+      status: "FLAGGED",
+      message:
+        "This product was scanned far from the area it was supplied to, so it has been flagged for review. Check with the seller before you consume it.",
+      reason: driftReason,
+    }
   }
 
   const productName = bottle.batch.product?.name ?? "Unknown Product"
   return {
     status: "GENUINE",
-    message: `Genuine ${productName}. First opening confirmed. Safe to consume.`,
+    message: `This ${productName} is genuine. This is the first time the cap has been opened.`,
     productName,
     openedAt: now,
     pairingChecked: Boolean(bottleSerialId),

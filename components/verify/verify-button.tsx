@@ -1,39 +1,42 @@
 "use client"
 
-import { ShieldCheck, Loader2 } from "lucide-react"
+import { Loader2, ShieldCheck } from "lucide-react"
 
 export function VerifyButton({
   onClick,
   pending,
-  label = "Tap to verify",
-  hint = "We'll ask for your location to help catch fakes. You can say no.",
+  label = "Verify this product",
+  pendingLabel = "Checking",
+  hint = "Your phone may ask to share your location. It helps us spot fakes, and the check still works if you say no.",
 }: {
   onClick: () => void
   pending: boolean
   label?: string
+  pendingLabel?: string
   hint?: string
 }) {
   return (
-    <div className="w-full max-w-sm mx-auto space-y-3 text-center">
+    <div className="space-y-3 text-center">
       <button
         type="button"
         onClick={onClick}
         disabled={pending}
-        className="w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-60 text-white font-semibold py-4 text-base transition-colors"
+        aria-busy={pending}
+        className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-4 text-base font-semibold text-white transition-colors hover:bg-brand-700 active:bg-brand-800 disabled:opacity-70 dark:bg-brand-500 dark:text-gray-950 dark:hover:bg-brand-400"
       >
         {pending ? (
           <>
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Verifying…
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+            {pendingLabel}
           </>
         ) : (
           <>
-            <ShieldCheck className="w-5 h-5" />
+            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
             {label}
           </>
         )}
       </button>
-      <p className="text-xs text-gray-500">{hint}</p>
+      {hint && <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{hint}</p>}
     </div>
   )
 }

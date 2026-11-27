@@ -4,9 +4,8 @@
 // =============================================================================
 
 import { prisma } from "@/lib/prisma"
+import type { AlertSeverity } from "@prisma/client"
 
-const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL ?? "https://verifychain-africa.vercel.app"
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 
@@ -112,7 +111,7 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
     checks.velocity++
 
     const count = item._count
-    const severity =
+    const severity: AlertSeverity =
       count >= VELOCITY_HIGH_CONCERN ? "HIGH_CONCERN" : "SUSPICIOUS"
     const confidence = Math.min(0.5 + (count / 20) * 0.5, 0.99)
 
@@ -146,9 +145,9 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
       await prisma.alertLog.create({
         data: {
           type: "REPEAT_SCAN_ABUSE",
-          severity: severity as any,
+          severity,
           manufacturerId: bottle.manufacturerId,
-          message: `Bottle ${bottle.serialId} scanned ${count} times in 24 hours — possible counterfeit distribution`,
+          message: `Bottle ${bottle.serialId} scanned ${count} times in 24 hours. Copies of this code may be in circulation.`,
           detail: JSON.stringify({
             bottleId: item.bottleId,
             serialId: bottle.serialId,
@@ -249,7 +248,7 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
               type: "GEOGRAPHIC_TELEPORTATION",
               severity: "CRITICAL",
               manufacturerId: bottle.manufacturerId,
-              message: `Bottle ${bottle.serialId} scanned ${Math.round(distKm)}km apart in ${hoursElapsed.toFixed(1)}hrs — physically impossible`,
+              message: `Bottle ${bottle.serialId} scanned ${Math.round(distKm)}km apart in ${hoursElapsed.toFixed(1)} hours, too far to travel in that time`,
               detail: JSON.stringify({
                 bottleId: item.bottleId,
                 serialId: bottle.serialId,
@@ -426,7 +425,7 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
           type: "BOT_ACTIVITY",
           severity: "HIGH_CONCERN",
           manufacturerId,
-          message: `${scans.length} scans from one source in under 2 minutes — possible automated scanning`,
+          message: `${scans.length} scans from one source in under 2 minutes, which suggests automated scanning`,
           detail: JSON.stringify({
             sourceHash: source.slice(0, 12),
             scanCount: scans.length,
@@ -498,7 +497,7 @@ export async function runFraudPipeline(): Promise<PipelineResult> {
 
 export async function runFastFraudPipeline(): Promise<PipelineResult> {
   const startTime = Date.now()
-  let alertsCreated = 0
+  const alertsCreated = 0
   const checks = {
     velocity: 0,
     teleportation: 0,

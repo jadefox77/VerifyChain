@@ -1,12 +1,37 @@
-import { requireAdmin } from "@/lib/admin-auth"
-import { prisma } from "@/lib/prisma"
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
-import { ArrowLeft, Upload } from "lucide-react"
 import Link from "next/link"
 import crypto from "crypto"
+import { ArrowLeft } from "lucide-react"
+import type { UserRole } from "@prisma/client"
+import { canWrite, requireAdmin } from "@/lib/admin-auth"
+import { prisma } from "@/lib/prisma"
+import { PageHeader } from "@/components/ui/page-header"
+import { Notice } from "@/components/ui/auth-shell"
+import { SubmitButton } from "@/components/ui/submit-button"
+import { buttonPrimary, card, cardHeader, cardTitle, fieldHint, fieldLabel, inputBase } from "@/lib/ui"
 
-export default async function ManualSubmitPage() {
-  await requireAdmin()
+export const metadata: Metadata = { title: "Record a pairing" }
+
+const PATH = "/admin/serialization/pairing/submit"
+
+const ERRORS: Record<string, string> = {
+  missing: "Fill in the manufacturer, bottle serial, top cap code and hidden serial.",
+  bottle_not_found: "No bottle with that serial exists.",
+  wrong_manufacturer: "That bottle belongs to a different manufacturer.",
+  bottle_paired: "That bottle already has a cap paired to it.",
+  cap_paired: "That hidden serial is already paired to another bottle.",
+  forbidden: "Your role can view pairings but cannot record them.",
+}
+
+export default async function ManualSubmitPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; saved?: string }>
+}) {
+  const session = await requireAdmin()
+  const params = await searchParams
+  const allowed = canWrite(session.user.role as UserRole)
 
   const manufacturers = await prisma.manufacturer.findMany({
     where: { onboardingStatus: "ACTIVE_PRODUCTION" },
@@ -14,123 +39,82 @@ export default async function ManualSubmitPage() {
     orderBy: { companyName: "asc" },
   })
 
+  const error = params.error ? ERRORS[params.error] : undefined
+
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6 lg:p-8">
       <Link
         href="/admin/serialization/pairing"
-        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 font-mono mb-6 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-gray-200"
       >
-        <ArrowLeft className="w-3 h-3" />
-        Back to Pairing Monitor
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Pairing
       </Link>
 
-      <h1 className="text-lg font-bold text-white mb-1">
-        Manual Pairing Submission
-      </h1>
-      <p className="text-xs text-gray-500 font-mono mb-6">
-        Submit pairing records manually after a production run. Use this
-        when scanners are not yet integrated with the automatic API.
-      </p>
+      <PageHeader
+        title="Record a pairing"
+        description="Link a bottle to its cap by hand, for production lines whose scanners are not yet connected to the pairing API."
+      />
 
-      <div className="space-y-6">
-        {/* Single pairing entry */}
-        <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-5">
-          <h2 className="text-sm font-mono text-gray-300 mb-4">
-            Single Pairing Entry
-          </h2>
-          <form action={submitSinglePairing} className="space-y-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
+      {params.saved && (
+        <Notice tone="success">
+          Pairing saved for bottle <span className="font-mono">{params.saved}</span>.
+        </Notice>
+      )}
+      {error && <Notice tone="error">{error}</Notice>}
+      {!allowed && !error && <Notice tone="info">{ERRORS.forbidden}</Notice>}
+
+      <section className={card}>
+        <div className={cardHeader}>
+          <h2 className={cardTitle}>Pairing details</h2>
+        </div>
+        <form action={submitSinglePairing} className="space-y-5 p-5">
+          <fieldset disabled={!allowed} className="space-y-5 disabled:opacity-60">
+            <div className="space-y-1.5">
+              <label htmlFor="manufacturerId" className={fieldLabel}>
                 Manufacturer
               </label>
-              <select
-                name="manufacturerId"
-                required
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-gray-600"
-              >
-                <option value="">Select manufacturer</option>
+              <select id="manufacturerId" name="manufacturerId" required defaultValue="" className={inputBase}>
+                <option value="" disabled>
+                  Choose a manufacturer
+                </option>
                 {manufacturers.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.companyName}
                   </option>
                 ))}
               </select>
+              <p className={fieldHint}>Only live manufacturers are listed.</p>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                Bottle Serial ID
+            <div className="space-y-1.5">
+              <label htmlFor="bottleSerialId" className={fieldLabel}>
+                Bottle serial
               </label>
-              <input
-                name="bottleSerialId"
-                required
-                placeholder="e.g. abc123xyz"
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 font-mono placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-              />
+              <input id="bottleSerialId" name="bottleSerialId" required maxLength={64} autoComplete="off" className={`${inputBase} font-mono`} />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                  Top Cap Code
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label htmlFor="topCapCode" className={fieldLabel}>
+                  Top cap code
                 </label>
-                <input
-                  name="topCapCode"
-                  required
-                  placeholder="e.g. X7P2A9"
-                  className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 font-mono placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-                />
+                <input id="topCapCode" name="topCapCode" required maxLength={32} autoComplete="off" placeholder="e.g. X7P2A9" className={`${inputBase} font-mono`} />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                  Hidden Serial ID
+              <div className="space-y-1.5">
+                <label htmlFor="hiddenSerialId" className={fieldLabel}>
+                  Hidden serial
                 </label>
-                <input
-                  name="hiddenSerialId"
-                  required
-                  placeholder="e.g. QR-K7L91X"
-                  className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 font-mono placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-                />
+                <input id="hiddenSerialId" name="hiddenSerialId" required maxLength={64} autoComplete="off" className={`${inputBase} font-mono`} />
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                Production Line ID
-                <span className="text-gray-700 ml-1">(optional)</span>
-              </label>
-              <input
-                name="lineId"
-                placeholder="e.g. LINE-A"
-                className="bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 font-mono placeholder:text-gray-600 focus:outline-none focus:border-gray-600"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-mono hover:bg-blue-500 transition-colors"
-            >
-              <Upload className="w-4 h-4" />
-              Submit Pairing Record
-            </button>
-          </form>
-        </div>
-
-        {/* API info for future batch CSV upload */}
-        <div className="bg-gray-900/40 border border-gray-800/40 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-500 uppercase tracking-wider mb-3">
-            Batch CSV Upload — Coming Soon
-          </h2>
-          <p className="text-xs text-gray-600 leading-relaxed">
-            Upload a CSV file of pairing records from your shift. Format:
-            one row per unit with columns{" "}
-            <span className="font-mono text-gray-500">
-              bottleSerialId, topCapCode, hiddenSerialId
-            </span>
-            . This feature is under development.
-          </p>
-        </div>
-      </div>
+            <SubmitButton className={`${buttonPrimary} w-full`} pendingLabel="Saving pairing" disabled={!allowed}>
+              Save pairing
+            </SubmitButton>
+          </fieldset>
+        </form>
+      </section>
     </div>
   )
 }
@@ -138,38 +122,40 @@ export default async function ManualSubmitPage() {
 async function submitSinglePairing(formData: FormData) {
   "use server"
 
-  const manufacturerId = formData.get("manufacturerId") as string
-  const bottleSerialId = formData.get("bottleSerialId") as string
-  const topCapCode = formData.get("topCapCode") as string
-  const hiddenSerialId = formData.get("hiddenSerialId") as string
+  // Server actions can be called directly, so check the role here as well.
+  const session = await requireAdmin()
+  if (!canWrite(session.user.role as UserRole)) redirect(`${PATH}?error=forbidden`)
 
-  if (!manufacturerId || !bottleSerialId || !topCapCode || !hiddenSerialId)
-    return
+  const text = (key: string) => String(formData.get(key) ?? "").trim().slice(0, 64)
+  const manufacturerId = text("manufacturerId")
+  const bottleSerialId = text("bottleSerialId")
+  const topCapCode = text("topCapCode")
+  const hiddenSerialId = text("hiddenSerialId")
+
+  if (!manufacturerId || !bottleSerialId || !topCapCode || !hiddenSerialId) redirect(`${PATH}?error=missing`)
 
   const bottle = await prisma.bottle.findUnique({
     where: { serialId: bottleSerialId },
     include: { cap: true },
   })
 
-  if (!bottle || bottle.cap) return
+  if (!bottle) redirect(`${PATH}?error=bottle_not_found`)
+  if (bottle.manufacturerId !== manufacturerId) redirect(`${PATH}?error=wrong_manufacturer`)
+  if (bottle.cap) redirect(`${PATH}?error=bottle_paired`)
 
-  // Check if this is an unpaired cap from a batch
-  const existingUnpairedCap = await prisma.cap.findUnique({
-    where: { hiddenSerialId },
-  })
+  const existingCap = await prisma.cap.findUnique({ where: { hiddenSerialId } })
 
-  if (existingUnpairedCap && existingUnpairedCap.bottleId === null) {
-    // Link the existing unpaired cap to this bottle
+  if (existingCap && existingCap.bottleId !== null) redirect(`${PATH}?error=cap_paired`)
+
+  if (existingCap) {
+    // A cap generated with the batch but not yet linked to a bottle
     await prisma.cap.update({
-      where: { id: existingUnpairedCap.id },
+      where: { id: existingCap.id },
       data: { bottleId: bottle.id },
     })
-  } else if (!existingUnpairedCap) {
-    // Create a brand new cap pairing (scanner-generated)
-    const hiddenHmacSig = crypto
-      .createHmac("sha256", process.env.QR_SECRET!)
-      .update(hiddenSerialId)
-      .digest("hex")
+  } else {
+    // A cap code read off the line by a scanner, not generated in advance
+    const hiddenHmacSig = crypto.createHmac("sha256", process.env.QR_SECRET!).update(hiddenSerialId).digest("hex")
 
     await prisma.cap.create({
       data: {
@@ -179,10 +165,7 @@ async function submitSinglePairing(formData: FormData) {
         hiddenHmacSig,
       },
     })
-  } else {
-    // Cap already paired to another bottle — reject
-    return
   }
 
-  redirect("/admin/serialization/pairing")
+  redirect(`${PATH}?saved=${encodeURIComponent(bottleSerialId)}`)
 }

@@ -1,20 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import {
-  Building2,
-  User,
-  Factory,
-  ScrollText,
-  CheckCircle2,
-  ChevronRight,
-  ChevronLeft,
-  Loader2,
-} from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { INDUSTRY_TYPES, NIGERIAN_STATES } from "@/lib/nigeria"
+import { buttonGhost, buttonPrimary, fieldHint, fieldLabel, inputBase } from "@/lib/ui"
 
 type FormData = {
-  // Step 1 — Company
+  // Company
   companyName: string
   rcNumber: string
   taxId: string
@@ -22,21 +15,18 @@ type FormData = {
   factoryLocations: string
   productionCapacity: string
   brandPortfolio: string
-
-  // Step 2 — Contact
+  // Contact
   primaryContact: string
   phone: string
   technicalContact: string
   complianceOfficer: string
-
-  // Step 3 — Operational
+  // Operations
   estimatedBottlesPerMonth: string
   packagingType: string
   capSupplier: string
   bottlingLineType: string
   erpSystem: string
-
-  // Step 4 — Regulatory
+  // Regulatory
   nafdacNumbers: string
   distributionRegions: string
 }
@@ -62,70 +52,52 @@ const INITIAL: FormData = {
   distributionRegions: "",
 }
 
-const STEPS = [
-  { label: "Company", icon: Building2 },
-  { label: "Contact", icon: User },
-  { label: "Operations", icon: Factory },
-  { label: "Regulatory", icon: ScrollText },
-  { label: "Review", icon: CheckCircle2 },
-]
+const STEPS = ["Company", "Contact", "Operations", "Regulatory", "Review"]
 
-const INDUSTRY_TYPES = [
-  "Beverage — Beer",
-  "Beverage — Soft Drink",
-  "Beverage — Water",
-  "Beverage — Energy Drink",
-  "Spirits & Alcoholic Beverages",
-  "Dairy",
-  "Food & Consumables",
-  "Other",
-]
-
-const PACKAGING_TYPES = ["PET Plastic", "Glass", "Aluminum Can", "Carton", "Mixed"]
-const BOTTLING_LINE_TYPES = ["Fully Automated", "Semi-Automated", "Manual", "Mixed"]
-const NIGERIAN_STATES = [
-  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa",
-  "Benue", "Borno", "Cross River", "Delta", "Ebonyi", "Edo",
-  "Ekiti", "Enugu", "FCT — Abuja", "Gombe", "Imo", "Jigawa",
-  "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara",
-  "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun",
-  "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
-]
-
-// ── Input components ──────────────────────────────────────────────────────────
+const PACKAGING_TYPES = ["PET plastic", "Glass", "Aluminium can", "Carton", "Mixed"]
+const BOTTLING_LINE_TYPES = ["Fully automated", "Semi-automated", "Manual", "Mixed"]
 
 function Field({
+  id,
   label,
   required,
   hint,
   children,
 }: {
+  id: string
   label: string
   required?: boolean
   hint?: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-gray-300">
+      <label htmlFor={id} className={fieldLabel}>
         {label}
-        {required && <span className="text-red-400 ml-0.5">*</span>}
+        {required ? (
+          <span className="ml-0.5 text-red-600 dark:text-red-400" aria-hidden="true">*</span>
+        ) : (
+          <span className="ml-1.5 font-normal text-gray-500 dark:text-gray-400">(optional)</span>
+        )}
       </label>
       {children}
       {hint && (
-        <p className="text-[11px] text-gray-600">{hint}</p>
+        <p id={`${id}-hint`} className={fieldHint}>
+          {hint}
+        </p>
       )}
     </div>
   )
 }
 
-const inputClass =
-  "w-full rounded-lg border border-gray-700 bg-gray-800/60 px-4 py-2.5 text-sm text-gray-200 placeholder:text-gray-600 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
-
-const selectClass =
-  "w-full rounded-lg border border-gray-700 bg-gray-800/60 px-4 py-2.5 text-sm text-gray-200 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
-
-// ── Main component ────────────────────────────────────────────────────────────
+function SectionTitle({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="mb-6">
+      <h2 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{title}</h2>
+      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{description}</p>
+    </div>
+  )
+}
 
 export function OnboardingForm({
   userEmail,
@@ -136,7 +108,7 @@ export function OnboardingForm({
 }) {
   const router = useRouter()
   const [step, setStep] = useState(0)
-  const [form, setForm] = useState<FormData>(INITIAL)
+  const [form, setForm] = useState<FormData>({ ...INITIAL, primaryContact: userName })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -144,19 +116,15 @@ export function OnboardingForm({
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  const regions = form.distributionRegions
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+
   function canAdvance(): boolean {
-    if (step === 0)
-      return (
-        form.companyName.trim() !== "" &&
-        form.industryType !== ""
-      )
-    if (step === 1)
-      return (
-        form.primaryContact.trim() !== "" &&
-        form.phone.trim() !== ""
-      )
-    if (step === 2)
-      return form.estimatedBottlesPerMonth.trim() !== ""
+    if (step === 0) return form.companyName.trim() !== "" && form.industryType !== ""
+    if (step === 1) return form.primaryContact.trim() !== "" && form.phone.trim() !== ""
+    if (step === 2) return form.estimatedBottlesPerMonth.trim() !== ""
     if (step === 3) return form.nafdacNumbers.trim() !== ""
     return true
   }
@@ -173,115 +141,149 @@ export function OnboardingForm({
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        setError(data.error ?? "Something went wrong. Please try again.")
+        const data = await res.json().catch(() => ({}))
+        setError(data.error ?? "We could not submit your application. Please try again.")
         setLoading(false)
         return
       }
 
       router.push("/onboarding/submitted")
     } catch {
-      setError("Network error. Please check your connection.")
+      setError("We could not reach the server. Check your internet connection and try again.")
       setLoading(false)
     }
   }
 
+  const review = [
+    {
+      title: "Company",
+      fields: [
+        { label: "Company name", value: form.companyName },
+        { label: "RC number", value: form.rcNumber },
+        { label: "Tax ID", value: form.taxId },
+        { label: "Industry", value: form.industryType },
+        { label: "Factory locations", value: form.factoryLocations },
+        { label: "Daily capacity", value: form.productionCapacity ? Number(form.productionCapacity).toLocaleString() : "" },
+        { label: "Brands", value: form.brandPortfolio },
+      ],
+    },
+    {
+      title: "Contact",
+      fields: [
+        { label: "Primary contact", value: form.primaryContact },
+        { label: "Phone", value: form.phone },
+        { label: "Technical contact", value: form.technicalContact },
+        { label: "Compliance officer", value: form.complianceOfficer },
+      ],
+    },
+    {
+      title: "Operations",
+      fields: [
+        {
+          label: "Units per month",
+          value: form.estimatedBottlesPerMonth ? Number(form.estimatedBottlesPerMonth).toLocaleString() : "",
+        },
+        { label: "Packaging", value: form.packagingType },
+        { label: "Cap supplier", value: form.capSupplier },
+        { label: "Bottling line", value: form.bottlingLineType },
+        { label: "ERP system", value: form.erpSystem },
+      ],
+    },
+    {
+      title: "Regulatory",
+      fields: [
+        { label: "NAFDAC numbers", value: form.nafdacNumbers },
+        {
+          label: "Distribution",
+          value: regions
+            .map((r) => NIGERIAN_STATES.find((s) => s.value === r)?.label ?? r)
+            .join(", "),
+        },
+      ],
+    },
+  ]
+
   return (
-    <div className="bg-gray-900/60 border border-gray-800/60 rounded-2xl overflow-hidden">
-      {/* Step indicators */}
-      <div className="flex border-b border-gray-800/60">
-        {STEPS.map((s, i) => {
-          const Icon = s.icon
-          const isDone = i < step
-          const isCurrent = i === step
-          return (
-            <div
-              key={s.label}
-              className={`flex-1 flex flex-col items-center gap-1 py-3 text-center border-r border-gray-800/60 last:border-r-0 transition-colors ${
-                isCurrent
-                  ? "bg-blue-500/5 border-b-2 border-b-blue-500"
-                  : isDone
-                  ? "bg-green-500/5"
-                  : ""
-              }`}
-            >
-              <Icon
-                className={`w-4 h-4 ${
-                  isDone
-                    ? "text-green-400"
-                    : isCurrent
-                    ? "text-blue-400"
-                    : "text-gray-600"
-                }`}
-              />
-              <span
-                className={`text-[10px] font-mono hidden sm:block ${
-                  isDone
-                    ? "text-green-400"
-                    : isCurrent
-                    ? "text-blue-400"
-                    : "text-gray-600"
-                }`}
-              >
-                {s.label}
-              </span>
-            </div>
-          )
-        })}
-      </div>
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
+      {/* Progress */}
+      <nav aria-label="Application progress" className="border-b border-gray-200 px-4 py-4 sm:px-6 dark:border-gray-800">
+        <ol className="flex items-center gap-2">
+          {STEPS.map((label, i) => {
+            const done = i < step
+            const current = i === step
+            return (
+              <li key={label} className="flex flex-1 items-center gap-2" aria-current={current ? "step" : undefined}>
+                <span
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                    done
+                      ? "bg-brand-600 text-white dark:bg-brand-500 dark:text-gray-950"
+                      : current
+                        ? "border-2 border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-300"
+                        : "border border-gray-300 text-gray-500 dark:border-gray-700 dark:text-gray-400"
+                  }`}
+                >
+                  {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : i + 1}
+                </span>
+                <span
+                  className={`hidden text-sm sm:inline ${
+                    current ? "font-medium text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400"
+                  }`}
+                >
+                  {label}
+                </span>
+                {i < STEPS.length - 1 && <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" aria-hidden="true" />}
+              </li>
+            )
+          })}
+        </ol>
+        <p className="mt-3 text-sm text-gray-600 sm:hidden dark:text-gray-400">
+          Step {step + 1} of {STEPS.length}: {STEPS[step]}
+        </p>
+      </nav>
 
-      {/* Form content */}
-      <div className="p-6">
-        {/* Step 1 — Company Information */}
+      <div className="p-4 sm:p-6">
         {step === 0 && (
-          <div className="space-y-4">
-            <div className="mb-2">
-              <h2 className="text-base font-bold text-white">
-                Company Information
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Basic details about your manufacturing company
-              </p>
-            </div>
-
-            <Field label="Company Name" required>
+          <div className="space-y-5">
+            <SectionTitle title="Company details" description="Tell us who you are and what you produce." />
+            <Field id="companyName" label="Registered company name" required>
               <input
-                className={inputClass}
+                id="companyName"
+                className={inputBase}
+                autoComplete="organization"
                 placeholder="e.g. Lagos Beverages Ltd"
                 value={form.companyName}
                 onChange={(e) => update("companyName", e.target.value)}
               />
             </Field>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field
-                label="RC Number"
-                hint="CAC registration number"
-              >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="rcNumber" label="RC number" hint="Your CAC registration number.">
                 <input
-                  className={inputClass}
-                  placeholder="RC-1234567"
+                  id="rcNumber"
+                  className={inputBase}
+                  placeholder="e.g. RC1234567"
+                  aria-describedby="rcNumber-hint"
                   value={form.rcNumber}
                   onChange={(e) => update("rcNumber", e.target.value)}
                 />
               </Field>
-              <Field label="Tax ID (TIN)">
+              <Field id="taxId" label="Tax ID (TIN)">
                 <input
-                  className={inputClass}
+                  id="taxId"
+                  className={inputBase}
                   placeholder="e.g. 12345678-0001"
                   value={form.taxId}
                   onChange={(e) => update("taxId", e.target.value)}
                 />
               </Field>
             </div>
-
-            <Field label="Industry Type" required>
+            <Field id="industryType" label="Industry" required>
               <select
-                className={selectClass}
+                id="industryType"
+                className={inputBase}
                 value={form.industryType}
                 onChange={(e) => update("industryType", e.target.value)}
               >
-                <option value="">Select industry type</option>
+                <option value="">Choose an industry</option>
                 {INDUSTRY_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -289,41 +291,36 @@ export function OnboardingForm({
                 ))}
               </select>
             </Field>
-
-            <Field
-              label="Factory Locations"
-              hint="List the states or cities where your factories are located"
-            >
+            <Field id="factoryLocations" label="Factory locations" hint="States or cities where you have factories.">
               <input
-                className={inputClass}
+                id="factoryLocations"
+                className={inputBase}
                 placeholder="e.g. Lagos, Ogun, Kano"
+                aria-describedby="factoryLocations-hint"
                 value={form.factoryLocations}
                 onChange={(e) => update("factoryLocations", e.target.value)}
               />
             </Field>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field
-                label="Production Capacity"
-                hint="Maximum bottles per day (factory-rated)"
-              >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="productionCapacity" label="Production capacity" hint="Maximum units per day.">
                 <input
-                  className={inputClass}
+                  id="productionCapacity"
+                  className={inputBase}
                   type="number"
+                  inputMode="numeric"
+                  min={0}
                   placeholder="e.g. 50000"
+                  aria-describedby="productionCapacity-hint"
                   value={form.productionCapacity}
-                  onChange={(e) =>
-                    update("productionCapacity", e.target.value)
-                  }
+                  onChange={(e) => update("productionCapacity", e.target.value)}
                 />
               </Field>
-              <Field
-                label="Brand Portfolio"
-                hint="Comma-separated list of your brands"
-              >
+              <Field id="brandPortfolio" label="Brands" hint="Separate brand names with commas.">
                 <input
-                  className={inputClass}
-                  placeholder="e.g. BrandA, BrandB"
+                  id="brandPortfolio"
+                  className={inputBase}
+                  placeholder="e.g. Brand A, Brand B"
+                  aria-describedby="brandPortfolio-hint"
                   value={form.brandPortfolio}
                   onChange={(e) => update("brandPortfolio", e.target.value)}
                 />
@@ -332,114 +329,88 @@ export function OnboardingForm({
           </div>
         )}
 
-        {/* Step 2 — Contact Information */}
         {step === 1 && (
-          <div className="space-y-4">
-            <div className="mb-2">
-              <h2 className="text-base font-bold text-white">
-                Contact Information
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Who should we contact for onboarding and technical support
-              </p>
-            </div>
-
-            <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-              <p className="text-xs text-blue-400 font-mono">
-                Signed in as {userName} · {userEmail}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Primary Contact Name" required>
+          <div className="space-y-5">
+            <SectionTitle title="Contact details" description="Who we should speak to during review and setup." />
+            <p className="rounded-lg bg-gray-50 px-3.5 py-2.5 text-sm text-gray-600 dark:bg-gray-800/60 dark:text-gray-300">
+              Signed in as <span className="font-medium text-gray-900 dark:text-white">{userEmail}</span>. This account
+              will be your company&apos;s sign-in for VerifyChain.
+            </p>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="primaryContact" label="Primary contact name" required>
                 <input
-                  className={inputClass}
-                  placeholder="Full name"
+                  id="primaryContact"
+                  className={inputBase}
+                  autoComplete="name"
                   value={form.primaryContact}
-                  onChange={(e) =>
-                    update("primaryContact", e.target.value)
-                  }
+                  onChange={(e) => update("primaryContact", e.target.value)}
                 />
               </Field>
-              <Field label="Phone Number" required>
+              <Field id="phone" label="Phone number" required>
                 <input
-                  className={inputClass}
+                  id="phone"
+                  className={inputBase}
                   type="tel"
+                  autoComplete="tel"
                   placeholder="+234 800 000 0000"
                   value={form.phone}
                   onChange={(e) => update("phone", e.target.value)}
                 />
               </Field>
             </div>
-
-            <Field
-              label="Technical Contact"
-              hint="Name and email of your IT or integration contact"
-            >
+            <Field id="technicalContact" label="Technical contact" hint="Name and email of the person who manages your IT or production systems.">
               <input
-                className={inputClass}
-                placeholder="e.g. John Doe — john@company.com"
+                id="technicalContact"
+                className={inputBase}
+                placeholder="e.g. Ada Obi, ada@company.com"
+                aria-describedby="technicalContact-hint"
                 value={form.technicalContact}
-                onChange={(e) =>
-                  update("technicalContact", e.target.value)
-                }
+                onChange={(e) => update("technicalContact", e.target.value)}
               />
             </Field>
-
-            <Field
-              label="Compliance Officer"
-              hint="Name and email of your regulatory compliance contact"
-            >
+            <Field id="complianceOfficer" label="Compliance officer" hint="Name and email of your regulatory contact.">
               <input
-                className={inputClass}
-                placeholder="e.g. Jane Smith — jane@company.com"
+                id="complianceOfficer"
+                className={inputBase}
+                placeholder="e.g. Tunde Bello, tunde@company.com"
+                aria-describedby="complianceOfficer-hint"
                 value={form.complianceOfficer}
-                onChange={(e) =>
-                  update("complianceOfficer", e.target.value)
-                }
+                onChange={(e) => update("complianceOfficer", e.target.value)}
               />
             </Field>
           </div>
         )}
 
-        {/* Step 3 — Operational Information */}
         {step === 2 && (
-          <div className="space-y-4">
-            <div className="mb-2">
-              <h2 className="text-base font-bold text-white">
-                Operational Information
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Details about your production setup and existing systems
-              </p>
-            </div>
-
+          <div className="space-y-5">
+            <SectionTitle title="Production" description="This helps us plan your integration and suggest a plan." />
             <Field
-              label="Estimated Bottles Per Month"
+              id="estimatedBottlesPerMonth"
+              label="Units produced per month"
               required
-              hint="This determines your subscription plan"
+              hint="An estimate is fine. We use it to recommend a subscription plan."
             >
               <input
-                className={inputClass}
+                id="estimatedBottlesPerMonth"
+                className={inputBase}
                 type="number"
+                inputMode="numeric"
+                min={0}
                 placeholder="e.g. 100000"
+                aria-describedby="estimatedBottlesPerMonth-hint"
                 value={form.estimatedBottlesPerMonth}
-                onChange={(e) =>
-                  update("estimatedBottlesPerMonth", e.target.value)
-                }
+                onChange={(e) => update("estimatedBottlesPerMonth", e.target.value)}
               />
             </Field>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Packaging Type">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="packagingType" label="Packaging">
                 <select
-                  className={selectClass}
+                  id="packagingType"
+                  className={inputBase}
                   value={form.packagingType}
-                  onChange={(e) =>
-                    update("packagingType", e.target.value)
-                  }
+                  onChange={(e) => update("packagingType", e.target.value)}
                 >
-                  <option value="">Select packaging type</option>
+                  <option value="">Choose packaging</option>
                   {PACKAGING_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {t}
@@ -447,29 +418,25 @@ export function OnboardingForm({
                   ))}
                 </select>
               </Field>
-              <Field
-                label="Cap Supplier"
-                hint="Name of your cap manufacturer"
-              >
+              <Field id="capSupplier" label="Cap supplier" hint="The company that makes your caps or closures.">
                 <input
-                  className={inputClass}
-                  placeholder="e.g. Nampak Nigeria"
+                  id="capSupplier"
+                  className={inputBase}
+                  aria-describedby="capSupplier-hint"
                   value={form.capSupplier}
                   onChange={(e) => update("capSupplier", e.target.value)}
                 />
               </Field>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Bottling Line Type">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="bottlingLineType" label="Bottling line">
                 <select
-                  className={selectClass}
+                  id="bottlingLineType"
+                  className={inputBase}
                   value={form.bottlingLineType}
-                  onChange={(e) =>
-                    update("bottlingLineType", e.target.value)
-                  }
+                  onChange={(e) => update("bottlingLineType", e.target.value)}
                 >
-                  <option value="">Select line type</option>
+                  <option value="">Choose line type</option>
                   {BOTTLING_LINE_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {t}
@@ -477,13 +444,11 @@ export function OnboardingForm({
                   ))}
                 </select>
               </Field>
-              <Field
-                label="Existing ERP System"
-                hint="Leave blank if none"
-              >
+              <Field id="erpSystem" label="ERP system" hint="For example SAP or Odoo. Leave blank if you do not use one.">
                 <input
-                  className={inputClass}
-                  placeholder="e.g. SAP, Odoo, None"
+                  id="erpSystem"
+                  className={inputBase}
+                  aria-describedby="erpSystem-hint"
                   value={form.erpSystem}
                   onChange={(e) => update("erpSystem", e.target.value)}
                 />
@@ -492,255 +457,140 @@ export function OnboardingForm({
           </div>
         )}
 
-        {/* Step 4 — Regulatory Information */}
         {step === 3 && (
-          <div className="space-y-4">
-            <div className="mb-2">
-              <h2 className="text-base font-bold text-white">
-                Regulatory Information
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Your NAFDAC registrations and distribution coverage
-              </p>
-            </div>
-
+          <div className="space-y-5">
+            <SectionTitle title="Regulatory details" description="We check these during compliance review." />
             <Field
-              label="NAFDAC Registration Numbers"
+              id="nafdacNumbers"
+              label="NAFDAC registration numbers"
               required
-              hint="Comma-separated list of all your NAFDAC registration numbers"
+              hint="Separate numbers with commas."
             >
               <textarea
-                className={`${inputClass} resize-none`}
+                id="nafdacNumbers"
+                className={`${inputBase} resize-y`}
                 rows={3}
-                placeholder="e.g. NAFDAC/FD/2023/001, NAFDAC/FD/2023/002"
+                placeholder="e.g. A1-1234, A1-5678"
+                aria-describedby="nafdacNumbers-hint"
                 value={form.nafdacNumbers}
-                onChange={(e) =>
-                  update("nafdacNumbers", e.target.value)
-                }
+                onChange={(e) => update("nafdacNumbers", e.target.value)}
               />
             </Field>
-
-            <Field
-              label="Distribution Regions"
-              hint="Select all states where your products are distributed"
-            >
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-gray-800/40 border border-gray-700 rounded-lg max-h-48 overflow-y-auto">
-                {NIGERIAN_STATES.map((state) => {
-                  const selected = form.distributionRegions
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean)
-                    .includes(state)
-
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className={fieldLabel}>
+                Where your products are sold
+                <span className="ml-1.5 font-normal text-gray-500 dark:text-gray-400">(optional)</span>
+              </legend>
+              <p className={`${fieldHint} mb-1`}>Choose every state you distribute to.</p>
+              <div className="grid max-h-64 grid-cols-2 gap-x-3 gap-y-1 overflow-y-auto rounded-lg border border-gray-300 p-3 sm:grid-cols-3 dark:border-gray-700">
+                {NIGERIAN_STATES.map(({ value, label }) => {
+                  const selected = regions.includes(value)
                   return (
                     <label
-                      key={state}
-                      className="flex items-center gap-2 cursor-pointer"
+                      key={value}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
                     >
                       <input
                         type="checkbox"
                         checked={selected}
                         onChange={(e) => {
-                          const current = form.distributionRegions
-                            .split(",")
-                            .map((s) => s.trim())
-                            .filter(Boolean)
                           const updated = e.target.checked
-                            ? [...current, state]
-                            : current.filter((s) => s !== state)
-                          update(
-                            "distributionRegions",
-                            updated.join(", ")
-                          )
+                            ? [...regions, value]
+                            : regions.filter((s) => s !== value)
+                          update("distributionRegions", updated.join(", "))
                         }}
-                        className="w-3 h-3 accent-blue-500"
+                        className="h-4 w-4 rounded accent-brand-600"
                       />
-                      <span className="text-xs text-gray-400">
-                        {state}
-                      </span>
+                      {label}
                     </label>
                   )
                 })}
               </div>
-              {form.distributionRegions && (
-                <p className="text-[10px] text-gray-600 font-mono mt-1">
-                  Selected:{" "}
-                  {
-                    form.distributionRegions
-                      .split(",")
-                      .filter(Boolean).length
-                  }{" "}
-                  states
+              {regions.length > 0 && (
+                <p className={fieldHint}>
+                  {regions.length} {regions.length === 1 ? "state" : "states"} selected
                 </p>
               )}
-            </Field>
+            </fieldset>
           </div>
         )}
 
-        {/* Step 5 — Review */}
         {step === 4 && (
-          <div className="space-y-4">
-            <div className="mb-2">
-              <h2 className="text-base font-bold text-white">
-                Review & Submit
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Confirm your details before submitting your application
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {[
-                {
-                  title: "Company",
-                  fields: [
-                    { label: "Company Name", value: form.companyName },
-                    { label: "RC Number", value: form.rcNumber },
-                    { label: "Tax ID", value: form.taxId },
-                    { label: "Industry", value: form.industryType },
-                    { label: "Locations", value: form.factoryLocations },
-                    { label: "Brands", value: form.brandPortfolio },
-                  ],
-                },
-                {
-                  title: "Contact",
-                  fields: [
-                    {
-                      label: "Primary Contact",
-                      value: form.primaryContact,
-                    },
-                    { label: "Phone", value: form.phone },
-                    {
-                      label: "Technical Contact",
-                      value: form.technicalContact,
-                    },
-                    {
-                      label: "Compliance Officer",
-                      value: form.complianceOfficer,
-                    },
-                  ],
-                },
-                {
-                  title: "Operations",
-                  fields: [
-                    {
-                      label: "Est. Bottles/Month",
-                      value: form.estimatedBottlesPerMonth
-                        ? parseInt(
-                            form.estimatedBottlesPerMonth
-                          ).toLocaleString()
-                        : "",
-                    },
-                    { label: "Packaging", value: form.packagingType },
-                    { label: "Cap Supplier", value: form.capSupplier },
-                    {
-                      label: "Bottling Line",
-                      value: form.bottlingLineType,
-                    },
-                    { label: "ERP", value: form.erpSystem },
-                  ],
-                },
-                {
-                  title: "Regulatory",
-                  fields: [
-                    {
-                      label: "NAFDAC Numbers",
-                      value: form.nafdacNumbers,
-                    },
-                    {
-                      label: "Distribution Regions",
-                      value: form.distributionRegions,
-                    },
-                  ],
-                },
-              ].map((section) => (
-                <div
-                  key={section.title}
-                  className="border border-gray-800/60 rounded-lg overflow-hidden"
-                >
-                  <div className="px-3 py-2 bg-gray-800/40 border-b border-gray-800/60">
-                    <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">
-                      {section.title}
-                    </p>
+          <div className="space-y-5">
+            <SectionTitle title="Review your application" description="Check your details. You can go back to change anything." />
+            <div className="space-y-4">
+              {review.map((section, i) => (
+                <div key={section.title} className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+                  <div className="flex items-center justify-between bg-gray-50 px-4 py-2.5 dark:bg-gray-800/60">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{section.title}</h3>
+                    <button
+                      type="button"
+                      onClick={() => setStep(i)}
+                      className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-400"
+                    >
+                      Edit
+                    </button>
                   </div>
-                  <div className="divide-y divide-gray-800/40">
+                  <dl className="divide-y divide-gray-100 dark:divide-gray-800">
                     {section.fields
                       .filter((f) => f.value)
                       .map((f) => (
-                        <div
-                          key={f.label}
-                          className="flex px-3 py-2 gap-4"
-                        >
-                          <span className="text-[11px] text-gray-600 w-32 shrink-0">
-                            {f.label}
-                          </span>
-                          <span className="text-[11px] text-gray-300 font-mono">
-                            {f.value}
-                          </span>
+                        <div key={f.label} className="grid gap-1 px-4 py-2.5 text-sm sm:grid-cols-[10rem_1fr] sm:gap-4">
+                          <dt className="text-gray-500 dark:text-gray-400">{f.label}</dt>
+                          <dd className="break-words text-gray-900 dark:text-gray-100">{f.value}</dd>
                         </div>
                       ))}
-                  </div>
+                  </dl>
                 </div>
               ))}
             </div>
-
-            <div className="p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
-              <p className="text-xs text-yellow-400">
-                After submission your application enters{" "}
-                <strong>Pending Review</strong>. You will not have
-                dashboard access until a VerifyChain administrator
-                approves your application.
-              </p>
-            </div>
-
+            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-3 text-sm text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+              Once you submit, our team reviews your application. Your dashboard
+              opens after approval, and you can follow each review stage when you
+              sign in.
+            </p>
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-xs text-red-400">{error}</p>
-              </div>
+              <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                {error}
+              </p>
             )}
           </div>
         )}
       </div>
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800/60 bg-gray-900/40">
+      <div className="flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6 dark:border-gray-800 dark:bg-gray-900/60">
         <button
+          type="button"
           onClick={() => setStep((s) => s - 1)}
           disabled={step === 0}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className={`${buttonGhost} px-3 disabled:invisible`}
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           Back
         </button>
 
-        <span className="text-[10px] font-mono text-gray-600">
-          Step {step + 1} of {STEPS.length}
-        </span>
-
         {step < STEPS.length - 1 ? (
           <button
+            type="button"
             onClick={() => setStep((s) => s + 1)}
             disabled={!canAdvance()}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className={buttonPrimary}
           >
-            Next
-            <ChevronRight className="w-4 h-4" />
+            Continue
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
         ) : (
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4" />
-            )}
-            {loading ? "Submitting..." : "Submit Application"}
+          <button type="button" onClick={handleSubmit} disabled={loading} className={buttonPrimary} aria-busy={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {loading ? "Submitting" : "Submit application"}
           </button>
         )}
       </div>
+      {step < STEPS.length - 1 && !canAdvance() && (
+        <p className="border-t border-gray-200 px-4 py-2.5 text-xs text-gray-500 sm:px-6 dark:border-gray-800 dark:text-gray-400">
+          Fill in the fields marked * to continue.
+        </p>
+      )}
     </div>
   )
 }

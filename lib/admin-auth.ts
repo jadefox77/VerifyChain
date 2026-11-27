@@ -1,29 +1,6 @@
-// =============================================================================
-// VerifyChain Africa — Admin Auth Utilities
-// Server-side RBAC helpers for use in Server Components and API routes
-// =============================================================================
-//
-// Usage in Server Components:
-//
-//   import { requireAdmin, requireSuperAdmin } from "@/lib/admin-auth"
-//
-//   export default async function AdminPage() {
-//     const session = await requireAdmin()   // throws redirect if unauthorized
-//     // session.user.role is now typed and validated
-//   }
-//
-// Usage in API routes:
-//
-//   import { getAdminSession, canWrite } from "@/lib/admin-auth"
-//
-//   export async function POST(req: Request) {
-//     const session = await getAdminSession()
-//     if (!session || !canWrite(session.user.role)) {
-//       return Response.json({ error: "Unauthorized" }, { status: 403 })
-//     }
-//   }
-//
-// =============================================================================
+// Server-side role checks for admin pages, server actions and API routes.
+// requireAdmin() and friends redirect when the check fails; getAdminSession()
+// returns null so API routes can answer with 401 or 403 themselves.
 
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -79,7 +56,7 @@ export async function requireAdmin(): Promise<AdminSession> {
   const session = await auth();
 
   if (!session?.user) {
-    redirect("/auth/signin");
+    redirect("/login");
   }
 
   if (!hasRole(session.user.role as UserRole, ADMIN_ROLES)) {
@@ -96,7 +73,7 @@ export async function requireSuperAdmin(): Promise<AdminSession> {
   const session = await auth();
 
   if (!session?.user) {
-    redirect("/auth/signin");
+    redirect("/login");
   }
 
   if (!hasRole(session.user.role as UserRole, SUPER_ADMIN_ONLY)) {
@@ -113,7 +90,7 @@ export async function requireFraudAccess(): Promise<AdminSession> {
   const session = await auth();
 
   if (!session?.user) {
-    redirect("/auth/signin");
+    redirect("/login");
   }
 
   if (!hasRole(session.user.role as UserRole, FRAUD_ROLES)) {
@@ -130,7 +107,7 @@ export async function requireRegulatoryAccess(): Promise<AdminSession> {
   const session = await auth();
 
   if (!session?.user) {
-    redirect("/auth/signin");
+    redirect("/login");
   }
 
   if (!hasRole(session.user.role as UserRole, REGULATORY_ROLES)) {
@@ -145,6 +122,12 @@ export async function requireRegulatoryAccess(): Promise<AdminSession> {
 
 export function canWrite(role: UserRole): boolean {
   return hasRole(role, WRITE_ROLES);
+}
+
+// Resolving an alert is part of the fraud team's job, so analysts can do it
+// as well as the roles that can write elsewhere.
+export function canResolveAlerts(role: UserRole): boolean {
+  return hasRole(role, FRAUD_ROLES);
 }
 
 export function canManageUsers(role: UserRole): boolean {
@@ -180,13 +163,13 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 };
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  SUPER_ADMIN: "Full platform access — VerifyChain staff only",
-  MANUFACTURER_ADMIN: "Full access to manufacturer tenant workspace",
-  FACTORY_OPERATOR: "Production line access — limited write permissions",
-  FRAUD_ANALYST: "Read access to fraud intelligence and alert management",
-  REGULATORY_OBSERVER: "Read-only access to regulatory and analytics views",
-  DISTRIBUTOR_MANAGER: "Scoped read access to distribution and scan data",
-  SUPPORT: "Read access and manufacturer management — VerifyChain support",
+  SUPER_ADMIN: "Full platform access. VerifyChain staff only.",
+  MANUFACTURER_ADMIN: "Full access to their own company workspace",
+  FACTORY_OPERATOR: "Production line access with limited write permissions",
+  FRAUD_ANALYST: "Fraud data, and can resolve alerts",
+  REGULATORY_OBSERVER: "Read-only access to regulatory and analytics pages",
+  DISTRIBUTOR_MANAGER: "Read access to distribution and scan data",
+  SUPPORT: "Read access plus manufacturer management. VerifyChain support staff.",
 };
 
 export const ROLE_BADGE_COLORS: Record<UserRole, string> = {

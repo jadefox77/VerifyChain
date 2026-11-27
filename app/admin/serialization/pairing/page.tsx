@@ -143,69 +143,59 @@ export default async function PairingMonitorPage() {
   const metrics = await getPairingMetrics()
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1400px]">
       {/* Header */}
       <div>
         <Link
           href="/admin/serialization"
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 font-mono mb-4 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 mb-4 transition-colors"
         >
           <ArrowLeft className="w-3 h-3" />
-          Back to Serialization Engine
+          Serialisation
         </Link>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 max-w-xl">
             <h1 className="text-lg font-bold text-white tracking-tight">
-              Production Pairing Monitor
+              Pairing
             </h1>
-            <p className="text-xs text-gray-500 font-mono mt-0.5">
-              Cap-bottle pairing integrity · Factory line visibility ·
-              Auto-refresh every 30s
+            <p className="text-xs text-gray-500 mt-0.5">
+              Cap and bottle pairings recorded on factory lines, and any
+              mismatches found when shoppers scan.
             </p>
           </div>
 
           {/* Manual submit + scanner API info */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/admin/serialization/pairing/submit"
-              className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-gray-300 border border-gray-700 rounded-lg text-xs font-mono hover:bg-gray-700 transition-colors"
+              className="flex items-center gap-2 whitespace-nowrap px-3 py-1.5 bg-gray-800 text-gray-300 border border-gray-700 rounded-lg text-xs hover:bg-gray-700 transition-colors"
             >
-              Manual Submit
+              Record a pairing
             </Link>
             <Link
               href="/admin/serialization/pairing/scanner-setup"
-              className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-mono hover:bg-blue-500/20 transition-colors"
+              className="flex items-center gap-2 whitespace-nowrap px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs hover:bg-blue-500/20 transition-colors"
             >
               <Cpu className="w-3.5 h-3.5" />
-              Scanner Setup
+              Scanner setup
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Live status bar */}
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-900/60 border border-gray-800/60 rounded-xl">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-          </span>
-          <span className="text-[10px] font-mono text-gray-500">
-            PAIRING SYSTEM ONLINE
-          </span>
-        </div>
-        <span className="text-gray-700">·</span>
-        <span className="text-[10px] font-mono text-gray-500">
+      {/* Summary bar */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-gray-900/60 border border-gray-800/60 rounded-xl">
+        <span className="text-xs text-gray-500">
           {metrics.pairingRate}% pairing rate
         </span>
-        <span className="text-gray-700">·</span>
-        <span className="text-[10px] font-mono text-gray-500">
+        <span className="text-gray-500">·</span>
+        <span className="text-xs text-gray-500">
           {metrics.totalUnpairedBottles} unpaired bottles
         </span>
         {metrics.totalUnpairedBottles > 0 && (
           <>
-            <span className="text-gray-700">·</span>
-            <span className="text-[10px] font-mono text-red-400 flex items-center gap-1">
+            <span className="text-gray-500">·</span>
+            <span className="text-xs text-red-400 flex items-center gap-1">
               <AlertTriangle className="w-3 h-3" />
               Requires investigation
             </span>
@@ -267,12 +257,12 @@ export default async function PairingMonitorPage() {
             className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-3"
           >
             <div className="flex items-center justify-between mb-1">
-              <p className="text-[9px] font-mono text-gray-600 uppercase tracking-wider">
+              <p className="text-[11px] text-gray-400 font-medium">
                 {card.label}
               </p>
               <card.icon className={`w-3 h-3 ${card.accent}`} />
             </div>
-            <p className={`text-xl font-bold font-mono ${card.accent}`}>
+            <p className={`text-xl font-bold tabular-nums ${card.accent}`}>
               {card.value}
             </p>
           </div>
@@ -282,10 +272,10 @@ export default async function PairingMonitorPage() {
       {/* Pairing integrity visual */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs text-gray-400 font-medium">
             Pairing Integrity
           </h2>
-          <span className="text-xs font-mono text-gray-500">
+          <span className="text-xs text-gray-500">
             {metrics.pairingRate}% of paired-mode bottles have a cap
           </span>
         </div>
@@ -302,10 +292,10 @@ export default async function PairingMonitorPage() {
           />
         </div>
         <div className="flex justify-between mt-2">
-          <span className="text-[10px] font-mono text-gray-600">
+          <span className="text-xs text-gray-400">
             {metrics.totalPairedBottles.toLocaleString()} paired
           </span>
-          <span className="text-[10px] font-mono text-gray-600">
+          <span className="text-xs text-gray-400">
             {metrics.totalUnpairedBottles.toLocaleString()} unpaired
           </span>
         </div>
@@ -315,19 +305,16 @@ export default async function PairingMonitorPage() {
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60">
           <div className="flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-            </span>
-            <h2 className="text-xs font-mono text-gray-300 uppercase tracking-wider">
-              Recent Pairing Events
+            <h2 className="text-xs text-gray-300 font-medium">
+              Recent pairings
             </h2>
           </div>
-          <span className="text-[10px] font-mono text-gray-600">
+          <span className="text-xs text-gray-400">
             Last 20 cap-bottle pairings
           </span>
         </div>
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/40">
               {[
@@ -341,7 +328,7 @@ export default async function PairingMonitorPage() {
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-2.5 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                  className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium"
                 >
                   {h}
                 </th>
@@ -353,7 +340,7 @@ export default async function PairingMonitorPage() {
               <tr>
                 <td
                   colSpan={7}
-                  className="px-4 py-8 text-center text-xs text-gray-600 font-mono"
+                  className="px-4 py-8 text-center text-xs text-gray-400"
                 >
                   No pairing events yet
                 </td>
@@ -386,40 +373,40 @@ export default async function PairingMonitorPage() {
                     }`}
                   >
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-300">
+                      <span className="font-mono text-xs text-gray-300">
                         {cap.topCode}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-500">
-                        {cap.bottle?.serialId?.slice(0, 12) ?? "—"}
+                      <span className="font-mono text-xs text-gray-500">
+                        {cap.bottle?.serialId?.slice(0, 12) ?? "Unpaired"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-500">
-                        {cap.bottle?.batch?.batchCode ?? "—"}
+                      <span className="font-mono text-xs text-gray-500">
+                        {cap.bottle?.batch?.batchCode ?? "None"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs text-gray-400">
-                        {cap.bottle?.batch?.product?.name ?? "—"}
+                        {cap.bottle?.batch?.product?.name ?? "None"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs text-gray-500">
                         {cap.bottle?.batch?.manufacturer?.companyName ??
-                          "—"}
+                          "None"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${statusConfig.style}`}
+                        className={`text-xs px-1.5 py-0.5 rounded border ${statusConfig.style}`}
                       >
                         {statusConfig.label}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1 text-[10px] font-mono text-gray-600">
+                      <div className="flex items-center gap-1 text-xs text-gray-400">
                         <Clock className="w-3 h-3" />
                         {timeAgo(cap.createdAt)}
                       </div>
@@ -430,6 +417,7 @@ export default async function PairingMonitorPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

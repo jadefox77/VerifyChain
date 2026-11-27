@@ -1,30 +1,14 @@
 import { requireSuperAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import {
-  CreditCard,
-  TrendingUp,
   Building2,
   AlertTriangle,
-  CheckCircle2,
   ChevronRight,
 } from "lucide-react"
 import Link from "next/link"
+import { PLAN_LIMITS, PLAN_PRICES, describeUsage, monthWindow } from "@/lib/plans"
 
 export const revalidate = 30
-
-const PLAN_LIMITS: Record<string, number> = {
-  FREE: 5000,
-  STARTER: 50000,
-  PROFESSIONAL: 500000,
-  ENTERPRISE: Infinity,
-}
-
-const PLAN_PRICES: Record<string, number> = {
-  FREE: 0,
-  STARTER: 150000,
-  PROFESSIONAL: 500000,
-  ENTERPRISE: 1500000,
-}
 
 const PLAN_CONFIG = {
   FREE: {
@@ -97,6 +81,14 @@ async function getBillingData() {
     }),
   ])
 
+  // Units serialised this month per manufacturer, the figure plan limits apply to
+  const monthlyUnits = await prisma.bottle.groupBy({
+    by: ["manufacturerId"],
+    _count: true,
+    where: { createdAt: { gte: monthWindow().start } },
+  })
+  const unitsThisMonth = new Map(monthlyUnits.map((r) => [r.manufacturerId, r._count]))
+
   // Batch 2
   const [totalBottlesAllTime, pastDueCount] = await Promise.all([
     prisma.bottle.count(),
@@ -116,6 +108,7 @@ async function getBillingData() {
 
   return {
     manufacturers,
+    unitsThisMonth,
     planCounts,
     statusCounts,
     totalBottlesAllTime,
@@ -137,13 +130,13 @@ export default async function AdminBillingPage() {
       ?._count ?? 0
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1400px]">
       {/* Header */}
       <div>
         <h1 className="text-lg font-bold text-white tracking-tight">
           Billing & Subscriptions
         </h1>
-        <p className="text-xs text-gray-500 font-mono mt-0.5">
+        <p className="text-xs text-gray-500 mt-0.5">
           Platform-wide subscription management · SUPER_ADMIN only
         </p>
       </div>
@@ -188,13 +181,13 @@ export default async function AdminBillingPage() {
             key={card.label}
             className={`border rounded-xl p-4 ${card.border} ${card.bg}`}
           >
-            <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-2">
+            <p className="text-xs text-gray-500 mb-2 font-medium">
               {card.label}
             </p>
-            <p className={`text-2xl font-bold font-mono ${card.accent}`}>
+            <p className={`text-2xl font-bold tabular-nums ${card.accent}`}>
               {card.value}
             </p>
-            <p className="text-[10px] text-gray-600 font-mono mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               {card.sub}
             </p>
           </div>
@@ -203,7 +196,7 @@ export default async function AdminBillingPage() {
 
       {/* Plan distribution */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-        <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
+        <h2 className="text-xs text-gray-400 mb-4 font-medium">
           Plan Distribution
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -223,26 +216,26 @@ export default async function AdminBillingPage() {
                 >
                   <div className="flex items-center justify-between mb-3">
                     <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${config.badge}`}
+                      className={`text-xs px-2 py-0.5 rounded border ${config.badge}`}
                     >
                       {config.label}
                     </span>
-                    <span className={`text-2xl font-bold font-mono ${config.color}`}>
+                    <span className={`text-2xl font-bold tabular-nums ${config.color}`}>
                       {count}
                     </span>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[10px] font-mono text-gray-600">
+                    <p className="text-xs text-gray-400">
                       {price === 0
                         ? "Free"
                         : `₦${price.toLocaleString()}/mo`}
                     </p>
-                    <p className="text-[10px] font-mono text-gray-700">
+                    <p className="text-xs text-gray-500">
                       {limit === Infinity
                         ? "Unlimited bottles"
                         : `${limit.toLocaleString()} bottles/mo`}
                     </p>
-                    <p className="text-[10px] font-mono text-gray-600">
+                    <p className="text-xs text-gray-400">
                       Est. ₦
                       {(price * count).toLocaleString()}/mo
                     </p>
@@ -257,26 +250,27 @@ export default async function AdminBillingPage() {
       {/* Manufacturer subscription table */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/60">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs text-gray-400 font-medium">
             Manufacturer Subscriptions
           </h2>
         </div>
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/40">
               {[
                 "Manufacturer",
                 "Plan",
                 "Status",
-                "Bottles Used",
-                "Plan Limit",
+                "Units this month",
+                "Monthly limit",
                 "Usage",
-                "Monthly Est.",
+                "Expected per month",
                 "",
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-2.5 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                  className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium"
                 >
                   {h}
                 </th>
@@ -288,7 +282,7 @@ export default async function AdminBillingPage() {
               <tr>
                 <td
                   colSpan={8}
-                  className="px-4 py-8 text-center text-xs text-gray-600 font-mono"
+                  className="px-4 py-8 text-center text-xs text-gray-400"
                 >
                   No active manufacturers
                 </td>
@@ -299,27 +293,21 @@ export default async function AdminBillingPage() {
                 const statusConfig = STATUS_CONFIG[m.subscriptionStatus]
                 const planLimit = PLAN_LIMITS[m.subscriptionPlan]
                 const price = PLAN_PRICES[m.subscriptionPlan]
+                const used = data.unitsThisMonth.get(m.id) ?? 0
+                const usage = describeUsage(m.subscriptionPlan, used)
 
-                const usagePct =
-                  planLimit === Infinity
-                    ? null
-                    : Math.min(
-                        (m.totalBottlesGenerated / planLimit) * 100,
-                        100
-                      )
+                const usagePct = usage.unlimited ? null : usage.percent
 
                 const usageColor =
-                  usagePct === null
+                  usage.unlimited
                     ? "bg-blue-500/40"
-                    : usagePct > 90
+                    : usage.state === "over"
                     ? "bg-red-500/60"
-                    : usagePct > 70
+                    : usage.state === "near"
                     ? "bg-orange-500/60"
                     : "bg-green-500/40"
 
-                const isOverLimit =
-                  planLimit !== Infinity &&
-                  m.totalBottlesGenerated > planLimit
+                const isOverLimit = usage.state === "over"
 
                 return (
                   <tr
@@ -332,12 +320,12 @@ export default async function AdminBillingPage() {
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <Building2 className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                        <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                         <div>
                           <p className="text-sm text-gray-200">
                             {m.companyName}
                           </p>
-                          <p className="text-[10px] font-mono text-gray-600">
+                          <p className="font-mono text-xs text-gray-400">
                             {m.rcNumber ?? "No RC"}
                           </p>
                         </div>
@@ -345,30 +333,30 @@ export default async function AdminBillingPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${planConfig.badge}`}
+                        className={`text-xs px-2 py-0.5 rounded border ${planConfig.badge}`}
                       >
                         {planConfig.label}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${statusConfig.badge}`}
+                        className={`text-xs px-2 py-0.5 rounded border ${statusConfig.badge}`}
                       >
                         {statusConfig.label}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-mono text-gray-400">
-                          {m.totalBottlesGenerated.toLocaleString()}
+                        <span className="text-xs text-gray-400">
+                          {used.toLocaleString()}
                         </span>
                         {isOverLimit && (
-                          <AlertTriangle className="w-3 h-3 text-red-400" />
+                          <AlertTriangle className="w-3 h-3 text-red-400" aria-label="Allowance used up, new batches paused" />
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-600">
+                      <span className="text-xs text-gray-400">
                         {planLimit === Infinity
                           ? "Unlimited"
                           : planLimit.toLocaleString()}
@@ -376,13 +364,13 @@ export default async function AdminBillingPage() {
                     </td>
                     <td className="px-4 py-3 w-32">
                       {usagePct === null ? (
-                        <span className="text-[10px] font-mono text-blue-400">
+                        <span className="text-xs text-blue-400">
                           Unlimited
                         </span>
                       ) : (
                         <div>
                           <div className="flex justify-between mb-1">
-                            <span className="text-[9px] font-mono text-gray-600">
+                            <span className="text-[11px] text-gray-400">
                               {usagePct.toFixed(1)}%
                             </span>
                           </div>
@@ -396,7 +384,7 @@ export default async function AdminBillingPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-400">
+                      <span className="text-xs text-gray-400">
                         {price === 0
                           ? "Free"
                           : `₦${price.toLocaleString()}`}
@@ -405,7 +393,7 @@ export default async function AdminBillingPage() {
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/manufacturers/${m.id}`}
-                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-blue-400 transition-colors font-mono"
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-400 transition-colors"
                       >
                         View
                         <ChevronRight className="w-3 h-3" />
@@ -417,6 +405,7 @@ export default async function AdminBillingPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

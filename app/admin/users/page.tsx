@@ -1,7 +1,11 @@
 import { requireSuperAdmin, ROLE_LABELS, ROLE_DESCRIPTIONS, ROLE_BADGE_COLORS } from "@/lib/admin-auth"
+import type { Metadata } from "next"
 import { prisma } from "@/lib/prisma"
+import { humanize, timeAgo } from "@/lib/format"
 import { Users, Shield, Mail, Calendar, ChevronDown } from "lucide-react"
 import type { UserRole } from "@prisma/client"
+
+export const metadata: Metadata = { title: "Users" }
 
 export const revalidate = 30
 
@@ -48,14 +52,6 @@ const ALL_ROLES: UserRole[] = [
   "SUPPORT",
 ]
 
-function timeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
-}
-
 export default async function UsersPage() {
   await requireSuperAdmin()
 
@@ -67,15 +63,15 @@ export default async function UsersPage() {
   const totalUsers = users.length
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1400px]">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-white tracking-tight">
-            User Management
+            Users and roles
           </h1>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">
-            {totalUsers} total users · SUPER_ADMIN access only
+          <p className="text-xs text-gray-500 mt-0.5">
+            {totalUsers} {totalUsers === 1 ? "account" : "accounts"}. Only super admins can change roles.
           </p>
         </div>
       </div>
@@ -101,10 +97,10 @@ export default async function UsersPage() {
               key={role}
               className={`border rounded-xl p-4 ${colors[role]}`}
             >
-              <p className="text-[10px] font-mono uppercase tracking-wider opacity-70 mb-1">
+              <p className="text-xs opacity-70 mb-1 font-medium">
                 {ROLE_LABELS[role as UserRole]}
               </p>
-              <p className="text-2xl font-bold font-mono">{count}</p>
+              <p className="text-2xl font-bold tabular-nums">{count}</p>
             </div>
           )
         })}
@@ -112,14 +108,15 @@ export default async function UsersPage() {
 
       {/* Users table */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/60">
               {["User", "Role", "Manufacturer", "Last Activity", "Joined", "Actions"].map(
                 (h) => (
                   <th
                     key={h}
-                    className="px-4 py-3 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                    className="px-4 py-3 text-left text-xs text-gray-400 font-medium"
                   >
                     {h}
                   </th>
@@ -137,6 +134,7 @@ export default async function UsersPage() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     {user.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- remote avatar from Google, not worth optimising
                       <img
                         src={user.image}
                         alt={user.name ?? ""}
@@ -144,16 +142,16 @@ export default async function UsersPage() {
                       />
                     ) : (
                       <div className="w-7 h-7 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center">
-                        <Users className="w-3.5 h-3.5 text-gray-600" />
+                        <Users className="w-3.5 h-3.5 text-gray-400" />
                       </div>
                     )}
                     <div>
                       <p className="text-sm text-gray-200">
-                        {user.name ?? "No name"}
+                        {user.name ?? "No name set"}
                       </p>
                       <div className="flex items-center gap-1 mt-0.5">
-                        <Mail className="w-2.5 h-2.5 text-gray-600" />
-                        <p className="text-[10px] text-gray-600 font-mono">
+                        <Mail className="w-2.5 h-2.5 text-gray-400" />
+                        <p className="text-xs text-gray-400">
                           {user.email}
                         </p>
                       </div>
@@ -164,7 +162,7 @@ export default async function UsersPage() {
                 {/* Role */}
                 <td className="px-4 py-3">
                   <span
-                    className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                    className={`text-xs px-2 py-0.5 rounded border ${
                       ROLE_BADGE_COLORS[user.role]
                     }`}
                   >
@@ -179,12 +177,12 @@ export default async function UsersPage() {
                       <p className="text-xs text-gray-300">
                         {user.manufacturer.companyName}
                       </p>
-                      <p className="text-[10px] font-mono text-gray-600 mt-0.5">
-                        {user.manufacturer.onboardingStatus.replace(/_/g, " ")}
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {humanize(user.manufacturer.onboardingStatus)}
                       </p>
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-700">—</span>
+                    <span className="text-xs text-gray-500">None</span>
                   )}
                 </td>
 
@@ -192,15 +190,15 @@ export default async function UsersPage() {
                 <td className="px-4 py-3">
                   {user.auditLogs[0] ? (
                     <div>
-                      <p className="text-[10px] font-mono text-gray-500">
-                        {user.auditLogs[0].action.replace(/_/g, " ")}
+                      <p className="text-xs text-gray-500">
+                        {humanize(user.auditLogs[0].action)}
                       </p>
-                      <p className="text-[10px] font-mono text-gray-700 mt-0.5">
+                      <p className="text-xs text-gray-500 mt-0.5">
                         {timeAgo(user.auditLogs[0].createdAt)}
                       </p>
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-700 font-mono">
+                    <span className="text-xs text-gray-500">
                       No activity
                     </span>
                   )}
@@ -208,7 +206,7 @@ export default async function UsersPage() {
 
                 {/* Joined */}
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-1 text-[10px] font-mono text-gray-600">
+                  <div className="flex items-center gap-1 text-xs text-gray-400">
                     <Calendar className="w-3 h-3" />
                     {new Date(user.createdAt).toLocaleDateString("en-NG", {
                       day: "numeric",
@@ -229,12 +227,13 @@ export default async function UsersPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Role reference */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-        <h2 className="text-xs font-mono text-gray-500 uppercase tracking-wider mb-4">
-          Role Reference
+        <h2 className="text-xs text-gray-500 mb-4 font-medium">
+          What each role can do
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {ALL_ROLES.map((role) => (
@@ -242,16 +241,16 @@ export default async function UsersPage() {
               key={role}
               className="flex items-start gap-3 p-2.5 rounded-lg bg-gray-800/40 border border-gray-800/40"
             >
-              <Shield className="w-3.5 h-3.5 text-gray-600 shrink-0 mt-0.5" />
+              <Shield className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
                   <span
-                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${ROLE_BADGE_COLORS[role]}`}
+                    className={`text-xs px-1.5 py-0.5 rounded border ${ROLE_BADGE_COLORS[role]}`}
                   >
                     {ROLE_LABELS[role]}
                   </span>
                 </div>
-                <p className="text-[10px] text-gray-600">
+                <p className="text-xs text-gray-400">
                   {ROLE_DESCRIPTIONS[role]}
                 </p>
               </div>
@@ -282,7 +281,7 @@ function RoleSelector({
         <select
           name="role"
           defaultValue={currentRole}
-          className="appearance-none bg-gray-800/60 border border-gray-700 rounded-lg pl-3 pr-7 py-1.5 text-xs text-gray-300 font-mono focus:outline-none focus:border-gray-600 cursor-pointer"
+          className="appearance-none bg-gray-800/60 border border-gray-700 rounded-lg pl-3 pr-7 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-gray-600 cursor-pointer"
         >
           {ALL_ROLES.map((role) => (
             <option key={role} value={role}>
@@ -290,11 +289,11 @@ function RoleSelector({
             </option>
           ))}
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-600 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
       </div>
       <button
         type="submit"
-        className="px-2.5 py-1.5 text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors whitespace-nowrap"
+        className="px-2.5 py-1.5 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors whitespace-nowrap"
       >
         Update
       </button>

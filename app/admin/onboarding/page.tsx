@@ -72,7 +72,7 @@ async function getPipelineData() {
           "TECHNICAL_INTEGRATION",
           "PILOT_APPROVAL",
           "ACTIVE_PRODUCTION",
-        ] as any,
+        ],
       },
     },
     select: {
@@ -109,7 +109,7 @@ async function getPipelineData() {
 async function getRejectedAndSuspended() {
   return prisma.manufacturer.findMany({
     where: {
-      onboardingStatus: { in: ["REJECTED", "SUSPENDED"] as any },
+      onboardingStatus: { in: ["REJECTED", "SUSPENDED"] },
     },
     select: {
       id: true,
@@ -150,14 +150,14 @@ export default async function OnboardingPipelinePage() {
   )
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-white tracking-tight">
             Onboarding Pipeline
           </h1>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">
+          <p className="text-xs text-gray-500 mt-0.5">
             {totalInPipeline} manufacturers in pipeline ·{" "}
             {pipeline["PENDING_REVIEW"]?.length ?? 0} awaiting review
           </p>
@@ -182,18 +182,18 @@ export default async function OnboardingPipelinePage() {
                       className={`w-1.5 h-1.5 rounded-full ${stage.dotColor}`}
                     />
                     <span
-                      className={`text-xs font-mono font-bold ${stage.headerColor}`}
+                      className={`text-xs font-bold ${stage.headerColor}`}
                     >
                       {stage.label}
                     </span>
                   </div>
                   <span
-                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${stage.countStyle}`}
+                    className={`text-xs px-1.5 py-0.5 rounded border ${stage.countStyle}`}
                   >
                     {cards.length}
                   </span>
                 </div>
-                <p className="text-[9px] text-gray-600 font-mono pl-3.5">
+                <p className="text-[11px] text-gray-400 pl-3.5">
                   {stage.description}
                 </p>
               </div>
@@ -202,7 +202,7 @@ export default async function OnboardingPipelinePage() {
               <div className="p-2 space-y-2 min-h-[120px]">
                 {cards.length === 0 ? (
                   <div className="flex items-center justify-center h-16">
-                    <p className="text-[10px] text-gray-700 font-mono">
+                    <p className="text-xs text-gray-500">
                       No manufacturers
                     </p>
                   </div>
@@ -225,29 +225,29 @@ export default async function OnboardingPipelinePage() {
                         {/* Company name + link */}
                         <div className="flex items-start justify-between gap-1 mb-2">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <Building2 className="w-3 h-3 text-gray-600 shrink-0" />
+                            <Building2 className="w-3 h-3 text-gray-400 shrink-0" />
                             <span className="text-xs font-medium text-gray-200 truncate">
                               {m.companyName}
                             </span>
                           </div>
                           <Link
                             href={`/admin/manufacturers/${m.id}`}
-                            className="shrink-0 text-gray-600 hover:text-blue-400 transition-colors"
+                            className="shrink-0 text-gray-400 hover:text-blue-400 transition-colors"
                           >
                             <ChevronRight className="w-3.5 h-3.5" />
                           </Link>
                         </div>
 
                         {/* RC number */}
-                        <p className="text-[10px] font-mono text-gray-600 mb-2">
+                        <p className="font-mono text-xs text-gray-400 mb-2">
                           {m.rcNumber ?? "RC not provided"}
                         </p>
 
                         {/* Days in stage */}
                         <div className="flex items-center gap-1 mb-3">
-                          <Clock className="w-3 h-3 text-gray-700" />
+                          <Clock className="w-3 h-3 text-gray-500" />
                           <span
-                            className={`text-[10px] font-mono ${daysStyle}`}
+                            className={`text-xs ${daysStyle}`}
                           >
                             {days === 0
                               ? "Today"
@@ -260,8 +260,8 @@ export default async function OnboardingPipelinePage() {
 
                         {/* Last admin note */}
                         {m.adminNotes[0] && (
-                          <p className="text-[10px] text-gray-600 italic mb-2 line-clamp-1">
-                            "{m.adminNotes[0].content}"
+                          <p className="text-xs text-gray-400 mb-2 line-clamp-1">
+                            Note: {m.adminNotes[0].content}
                           </p>
                         )}
 
@@ -275,11 +275,11 @@ export default async function OnboardingPipelinePage() {
                             >
                               <button
                                 type="submit"
-                                className="w-full flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-colors"
+                                className="w-full flex items-center justify-center gap-1 px-2 py-1 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-colors"
                               >
                                 <CheckCircle2 className="w-3 h-3" />
                                 {nextStage
-                                  ? `→ ${nextStage.label}`
+                                  ? `Move to ${nextStage.label}`
                                   : "Advance"}
                               </button>
                             </form>
@@ -290,7 +290,7 @@ export default async function OnboardingPipelinePage() {
                             >
                               <button
                                 type="submit"
-                                className="px-2 py-1 text-[10px] font-mono bg-red-500/10 text-red-400 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors"
+                                className="px-2 py-1 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors"
                                 title="Reject"
                               >
                                 <XCircle className="w-3 h-3" />
@@ -302,7 +302,7 @@ export default async function OnboardingPipelinePage() {
                         {isLastStage && (
                           <div className="flex items-center gap-1 mt-2">
                             <CheckCircle2 className="w-3 h-3 text-green-500" />
-                            <span className="text-[10px] font-mono text-green-500">
+                            <span className="text-xs text-green-500">
                               Live
                             </span>
                           </div>
@@ -321,11 +321,12 @@ export default async function OnboardingPipelinePage() {
       {offtrack.length > 0 && (
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-800/60">
-            <h2 className="text-xs font-mono text-gray-500 uppercase tracking-wider">
+            <h2 className="text-xs text-gray-500 font-medium">
               Rejected & Suspended
             </h2>
           </div>
-          <table className="w-full">
+          <div className="table-scroll">
+          <table className="w-full min-w-[760px]">
             <thead>
               <tr className="border-b border-gray-800/40">
                 {[
@@ -337,7 +338,7 @@ export default async function OnboardingPipelinePage() {
                 ].map((h) => (
                   <th
                     key={h}
-                    className="px-4 py-2 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                    className="px-4 py-2 text-left text-xs text-gray-400 font-medium"
                   >
                     {h}
                   </th>
@@ -356,13 +357,13 @@ export default async function OnboardingPipelinePage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5">
-                    <span className="text-xs font-mono text-gray-600">
-                      {m.rcNumber ?? "—"}
+                    <span className="font-mono text-xs text-gray-400">
+                      {m.rcNumber ?? "Not provided"}
                     </span>
                   </td>
                   <td className="px-4 py-2.5">
                     <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                      className={`text-xs px-2 py-0.5 rounded border ${
                         m.onboardingStatus === "REJECTED"
                           ? "bg-red-500/10 text-red-400 border-red-500/20"
                           : "bg-gray-500/10 text-gray-400 border-gray-500/20"
@@ -372,7 +373,7 @@ export default async function OnboardingPipelinePage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5">
-                    <span className="text-xs font-mono text-gray-600">
+                    <span className="text-xs text-gray-400">
                       {new Date(m.updatedAt).toLocaleDateString(
                         "en-NG",
                         {
@@ -386,7 +387,7 @@ export default async function OnboardingPipelinePage() {
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/admin/manufacturers/${m.id}`}
-                      className="flex items-center gap-1 text-xs text-gray-600 hover:text-blue-400 transition-colors font-mono"
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-400 transition-colors"
                     >
                       View
                       <ChevronRight className="w-3 h-3" />
@@ -396,6 +397,7 @@ export default async function OnboardingPipelinePage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

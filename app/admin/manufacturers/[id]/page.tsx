@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   Activity,
   ChevronRight,
+  Check,
 } from "lucide-react"
 
 export const revalidate = 30
@@ -89,12 +90,12 @@ export default async function ManufacturerProfilePage({
   const fraudRate = manufacturer.fraudRateCached
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1400px]">
       {/* Back + header */}
       <div>
         <Link
           href="/admin/manufacturers"
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 font-mono mb-4 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 mb-4 transition-colors"
         >
           <ArrowLeft className="w-3 h-3" />
           Back to Manufacturers
@@ -109,7 +110,7 @@ export default async function ManufacturerProfilePage({
               <h1 className="text-lg font-bold text-white">
                 {manufacturer.companyName}
               </h1>
-              <p className="text-xs font-mono text-gray-500 mt-0.5">
+              <p className="text-xs text-gray-500 mt-0.5">
                 RC: {manufacturer.rcNumber ?? "Not provided"} ·{" "}
                 {manufacturer.industryType ?? "Industry not set"}
               </p>
@@ -121,13 +122,13 @@ export default async function ManufacturerProfilePage({
             <div className="flex items-center gap-2">
               {manufacturer.onboardingStatus === "SUSPENDED" ? (
                 <form action={`/api/admin/manufacturers/${id}/activate`} method="POST">
-                  <button className="px-3 py-1.5 text-xs font-mono bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg hover:bg-green-500/20 transition-colors">
+                  <button className="px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg hover:bg-green-500/20 transition-colors">
                     Activate Account
                   </button>
                 </form>
               ) : (
                 <form action={`/api/admin/manufacturers/${id}/suspend`} method="POST">
-                  <button className="px-3 py-1.5 text-xs font-mono bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors">
+                  <button className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors">
                     Suspend Account
                   </button>
                 </form>
@@ -140,7 +141,7 @@ export default async function ManufacturerProfilePage({
       {/* Onboarding progress */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs text-gray-400 font-medium">
             Onboarding Status
           </h2>
           {canEdit &&
@@ -164,18 +165,18 @@ export default async function ManufacturerProfilePage({
               <div key={stage.key} className="flex items-center flex-1">
                 <div className="flex flex-col items-center flex-1">
                   <div
-                    className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-mono mb-1 transition-colors ${
+                    className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs mb-1 transition-colors ${
                       isDone
                         ? "bg-green-500/20 border-green-500/40 text-green-400"
                         : isCurrent
                         ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
-                        : "bg-gray-800 border-gray-700 text-gray-600"
+                        : "bg-gray-800 border-gray-700 text-gray-400"
                     }`}
                   >
-                    {isDone ? "✓" : stage.step}
+                    {isDone ? <Check className="h-3.5 w-3.5" aria-label="Done" /> : stage.step}
                   </div>
                   <span
-                    className={`text-[9px] font-mono text-center ${
+                    className={`text-[11px] text-center ${
                       isCurrent ? "text-blue-400" : isDone ? "text-green-400" : "text-gray-600"
                     }`}
                   >
@@ -224,10 +225,10 @@ export default async function ManufacturerProfilePage({
             key={card.label}
             className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4"
           >
-            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-2">
+            <p className="text-xs text-gray-400 mb-2 font-medium">
               {card.label}
             </p>
-            <p className={`text-2xl font-bold font-mono ${card.accent ?? "text-white"}`}>
+            <p className={`text-2xl font-bold tabular-nums ${card.accent ?? "text-white"}`}>
               {card.value}
             </p>
           </div>
@@ -238,7 +239,7 @@ export default async function ManufacturerProfilePage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Company details */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4 space-y-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs text-gray-400 font-medium">
             Company Details
           </h2>
 
@@ -266,9 +267,9 @@ export default async function ManufacturerProfilePage({
               },
             ].map((field) => (
               <div key={field.label} className="flex items-start gap-2">
-                <field.icon className="w-3.5 h-3.5 text-gray-600 mt-0.5 shrink-0" />
+                <field.icon className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-[10px] font-mono text-gray-600">
+                  <p className="text-xs text-gray-400">
                     {field.label}
                   </p>
                   <p className="text-xs text-gray-300">
@@ -281,20 +282,20 @@ export default async function ManufacturerProfilePage({
 
           <div className="pt-3 border-t border-gray-800/60 space-y-2">
             <div className="flex justify-between">
-              <span className="text-[10px] font-mono text-gray-600">Plan</span>
-              <span className="text-[10px] font-mono text-blue-400">
+              <span className="text-xs text-gray-400">Plan</span>
+              <span className="text-xs text-blue-400">
                 {manufacturer.subscriptionPlan}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[10px] font-mono text-gray-600">Status</span>
-              <span className="text-[10px] font-mono text-gray-400">
+              <span className="text-xs text-gray-400">Status</span>
+              <span className="text-xs text-gray-400">
                 {manufacturer.subscriptionStatus}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[10px] font-mono text-gray-600">NAFDAC</span>
-              <span className="text-[10px] font-mono text-gray-400">
+              <span className="text-xs text-gray-400">NAFDAC</span>
+              <span className="text-xs text-gray-400">
                 {manufacturer.nafdacNumbers ?? "Not provided"}
               </span>
             </div>
@@ -304,14 +305,14 @@ export default async function ManufacturerProfilePage({
         {/* Recent batches */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+            <h2 className="text-xs text-gray-400 font-medium">
               Recent Batches
             </h2>
           </div>
 
           <div className="space-y-2">
             {manufacturer.batches.length === 0 ? (
-              <p className="text-xs text-gray-600 font-mono">No batches yet</p>
+              <p className="text-xs text-gray-400">No batches yet</p>
             ) : (
               manufacturer.batches.map((batch) => (
                 <div
@@ -319,15 +320,15 @@ export default async function ManufacturerProfilePage({
                   className="flex items-center justify-between py-2 border-b border-gray-800/40 last:border-0"
                 >
                   <div>
-                    <p className="text-xs text-gray-300 font-mono">
+                    <p className="font-mono text-xs text-gray-300">
                       {batch.batchCode}
                     </p>
-                    <p className="text-[10px] text-gray-600 mt-0.5">
+                    <p className="text-xs text-gray-400 mt-0.5">
                       {batch.product?.name ?? "No product"} ·{" "}
                       {batch._count.bottles.toLocaleString()} bottles
                     </p>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-600">
+                  <span className="text-xs text-gray-400">
                     {new Date(batch.createdAt).toLocaleDateString("en-NG", {
                       day: "numeric",
                       month: "short",
@@ -342,10 +343,10 @@ export default async function ManufacturerProfilePage({
         {/* Active alerts */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+            <h2 className="text-xs text-gray-400 font-medium">
               Active Alerts
             </h2>
-            <span className="text-[10px] font-mono text-gray-600">
+            <span className="text-xs text-gray-400">
               {manufacturer._count.alertLogs} total
             </span>
           </div>
@@ -353,7 +354,7 @@ export default async function ManufacturerProfilePage({
           <div className="space-y-2">
             {manufacturer.alertLogs.length === 0 ? (
               <div className="text-center py-4">
-                <p className="text-xs text-gray-600 font-mono">
+                <p className="text-xs text-gray-400">
                   No active alerts
                 </p>
               </div>
@@ -366,7 +367,7 @@ export default async function ManufacturerProfilePage({
                     className="flex items-start gap-2 py-2 border-b border-gray-800/40 last:border-0"
                   >
                     <span
-                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded border shrink-0 mt-0.5 ${config.style}`}
+                      className={`text-[11px] px-1.5 py-0.5 rounded border shrink-0 mt-0.5 ${config.style}`}
                     >
                       {config.label}
                     </span>
@@ -384,13 +385,13 @@ export default async function ManufacturerProfilePage({
       {/* Admin notes */}
       {canEdit && (
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
+          <h2 className="text-xs text-gray-400 mb-4 font-medium">
             Internal Notes
           </h2>
 
           <div className="space-y-3 mb-4">
             {manufacturer.adminNotes.length === 0 ? (
-              <p className="text-xs text-gray-600 font-mono">No notes yet</p>
+              <p className="text-xs text-gray-400">No notes yet</p>
             ) : (
               manufacturer.adminNotes.map((note) => (
                 <div
@@ -398,10 +399,10 @@ export default async function ManufacturerProfilePage({
                   className="border border-gray-800/60 rounded-lg p-3"
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-mono text-gray-500">
+                    <span className="text-xs text-gray-500">
                       {note.authorName}
                     </span>
-                    <span className="text-[10px] font-mono text-gray-600">
+                    <span className="text-xs text-gray-400">
                       {new Date(note.createdAt).toLocaleDateString("en-NG", {
                         day: "numeric",
                         month: "short",
@@ -444,7 +445,7 @@ function AdvanceStageForm({
     >
       <button
         type="submit"
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors"
       >
         Advance to {nextStage.label}
         <ChevronRight className="w-3 h-3" />
@@ -470,7 +471,7 @@ function AddNoteForm({ manufacturerId }: { manufacturerId: string }) {
       />
       <button
         type="submit"
-        className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg text-sm hover:bg-gray-600 transition-colors font-mono"
+        className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg text-sm hover:bg-gray-600 transition-colors"
       >
         Add Note
       </button>

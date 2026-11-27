@@ -1,15 +1,12 @@
 "use client"
 
-import { useState, useTransition, type ReactNode } from "react"
-import {
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  ScanLine,
-} from "lucide-react"
+import { useState, useTransition } from "react"
+import { CheckCircle2, ScanLine } from "lucide-react"
 import { CountdownTimer } from "@/components/verify/countdown-timer"
 import { VerifyButton } from "@/components/verify/verify-button"
 import { getLocation } from "@/components/verify/get-location"
+import { ResultCard, WhatToDo } from "@/components/verify/result-card"
+import { formatSerialId } from "@/lib/serial-format"
 import {
   verifyBottleAction,
   type BottleActionResult,
@@ -24,13 +21,9 @@ const DATE_FORMAT: Intl.DateTimeFormatOptions = {
   minute: "2-digit",
 }
 
-export function BottleVerify({
-  serialId,
-  sig,
-}: {
-  serialId: string
-  sig?: string
-}) {
+const fmt = (d: Date | string) => new Date(d).toLocaleString("en-NG", DATE_FORMAT)
+
+export function BottleVerify({ serialId, sig }: { serialId: string; sig?: string }) {
   const [result, setResult] = useState<BottleActionResult | null>(null)
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -42,22 +35,29 @@ export function BottleVerify({
         const coords = await getLocation()
         setResult(await verifyBottleAction(serialId, sig, coords))
       } catch {
-        setError("Something went wrong. Check your connection and try again.")
+        setError("We could not complete the check. Check your internet connection and try again.")
       }
     })
   }
 
   if (!result) {
     return (
-      <div className="w-full max-w-sm mx-auto space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-lg font-bold text-white">Verify this product</h1>
-          <p className="text-sm text-gray-400">
-            Tap the button to check that this bottle is genuine.
+      <div className="space-y-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
+            Check this product
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+            Tap the button to confirm this pack is genuine. Your result appears on
+            this screen in a few seconds.
           </p>
         </div>
         <VerifyButton onClick={run} pending={pending} />
-        {error && <p className="text-xs text-center text-red-400">{error}</p>}
+        {error && (
+          <p role="alert" className="text-center text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
       </div>
     )
   }
@@ -66,179 +66,107 @@ export function BottleVerify({
     case "INVALID":
     case "NOT_FOUND":
       return (
-        <StatusCard
-          icon={<XCircle className="w-10 h-10 text-red-400" />}
-          bg="bg-red-500/10"
-          border="border-red-500/20"
-          title="Product Not Found"
-          message={result.message}
-          severity="danger"
-        />
+        <>
+          <ResultCard tone="bad" title="We could not verify this product" message={result.message} />
+          <WhatToDo />
+        </>
       )
 
     case "RATE_LIMITED":
-      return (
-        <StatusCard
-          icon={<AlertTriangle className="w-10 h-10 text-yellow-400" />}
-          bg="bg-yellow-500/10"
-          border="border-yellow-500/20"
-          title="Slow down"
-          message={result.message}
-          severity="warning"
-        />
-      )
+      return <ResultCard tone="wait" title="Please wait a moment" message={result.message} />
 
     case "FLAGGED":
       return (
-        <StatusCard
-          icon={<XCircle className="w-10 h-10 text-red-400" />}
-          bg="bg-red-500/10"
-          border="border-red-500/20"
-          title="Fraud Detected"
-          message={result.message}
-          severity="danger"
-        />
+        <>
+          <ResultCard tone="bad" title="Do not use this product" message={result.message} />
+          <WhatToDo />
+        </>
       )
 
     case "CAP_ALREADY_OPENED":
       return (
-        <StatusCard
-          icon={<AlertTriangle className="w-10 h-10 text-orange-400" />}
-          bg="bg-orange-500/10"
-          border="border-orange-500/20"
-          title="Possible Refill Detected"
-          message={result.message}
-          severity="warning"
-        />
+        <>
+          <ResultCard tone="bad" title="This bottle has been opened before" message={result.message} />
+          <WhatToDo />
+        </>
       )
 
     case "ALREADY_VERIFIED":
       return (
-        <StatusCard
-          icon={<AlertTriangle className="w-10 h-10 text-yellow-400" />}
-          bg="bg-yellow-500/10"
-          border="border-yellow-500/20"
-          title="Already Verified"
+        <ResultCard
+          tone="warn"
+          title="Already checked"
           message={result.message}
-          severity="warning"
-          sub={`First verified: ${new Date(result.firstScan).toLocaleDateString("en-NG", DATE_FORMAT)}`}
+          details={[{ label: "First checked", value: fmt(result.firstScan) }]}
         />
       )
 
     case "GENUINE_SINGLE":
       return (
-        <StatusCard
-          icon={<CheckCircle2 className="w-10 h-10 text-green-400" />}
-          bg="bg-green-500/10"
-          border="border-green-500/20"
-          title="Genuine Product"
+        <ResultCard
+          tone="good"
+          title="Genuine product"
           message={result.message}
-          severity="success"
-          sub={`Verified: ${new Date(result.openedAt).toLocaleDateString("en-NG", DATE_FORMAT)}`}
-          badge="Single-Scan Verified"
+          details={[
+            { label: "Product", value: result.productName },
+            { label: "Checked", value: fmt(result.openedAt) },
+          ]}
+          note="This code can only be confirmed once. Anyone who scans it again will be told it was already checked."
         />
       )
 
     case "PROMPT_CAP":
       return (
-        <div className="w-full max-w-sm mx-auto space-y-4">
-          <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-            <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-brand-600 dark:text-brand-400" aria-hidden="true" />
             <div>
-              <p className="text-sm font-semibold text-green-400">Step 1 Complete</p>
-              <p className="text-xs text-green-400/70 mt-0.5">
-                Bottle identity confirmed — {result.productName}
-              </p>
+              <p className="text-sm font-semibold text-brand-900 dark:text-brand-100">Bottle found</p>
+              <p className="mt-0.5 text-sm text-brand-900/80 dark:text-brand-100/80">{result.productName}</p>
             </div>
           </div>
 
-          <div className="p-5 bg-gray-900/80 border border-gray-700 rounded-xl space-y-4">
-            <div className="flex items-center gap-2">
-              <ScanLine className="w-5 h-5 text-blue-400" />
-              <p className="text-sm font-semibold text-white">
-                Step 2 — Scan the Hidden Cap QR
-              </p>
-            </div>
-            <ol className="space-y-2">
+          <section className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Step 2 of 2</p>
+            <h1 className="mt-1 flex items-center gap-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
+              <ScanLine className="h-5 w-5 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+              Scan the code inside the cap
+            </h1>
+            <ol className="mt-4 space-y-3 text-sm text-gray-700 dark:text-gray-300">
               {[
-                "Open the bottle",
-                "Look inside the cap",
-                "Find the QR code printed inside",
-                "Scan it with this phone's camera, within 10 minutes",
+                "Open the bottle.",
+                "Find the QR code printed on the inside of the cap.",
+                "Scan it with this phone's camera and tap Confirm.",
               ].map((step, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs text-gray-400">
-                  <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center shrink-0 mt-0.5 font-mono">
+                <li key={step} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
                     {i + 1}
                   </span>
-                  {step}
+                  <span className="pt-0.5">{step}</span>
                 </li>
               ))}
             </ol>
-            <CountdownTimer minutes={10} />
+            <div className="mt-5">
+              <CountdownTimer minutes={10} />
+            </div>
             {result.topCode && (
-              <div className="pt-3 border-t border-gray-800">
-                <p className="text-[10px] font-mono text-gray-600 mb-1">
-                  Top cap code for reference:
+              <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-800">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Code printed on top of the cap
                 </p>
-                <p className="text-lg font-bold font-mono text-white tracking-widest">
-                  {result.topCode}
+                <p className="mt-1 font-mono text-lg font-semibold tracking-widest text-gray-900 dark:text-white">
+                  {formatSerialId(result.topCode)}
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  If this does not match the code on your cap, the cap may have been swapped.
                 </p>
               </div>
             )}
-          </div>
-
-          <p className="text-[11px] text-center text-gray-600">
-            Powered by VerifyChain Africa
-          </p>
+          </section>
         </div>
       )
 
     default:
       return null
   }
-}
-
-function StatusCard({
-  icon,
-  bg,
-  border,
-  title,
-  message,
-  severity,
-  sub,
-  badge,
-}: {
-  icon: ReactNode
-  bg: string
-  border: string
-  title: string
-  message: string
-  severity: "success" | "warning" | "danger"
-  sub?: string
-  badge?: string
-}) {
-  return (
-    <div className={`w-full max-w-sm mx-auto border rounded-2xl p-6 text-center space-y-3 ${bg} ${border}`}>
-      <div className="flex justify-center">{icon}</div>
-      <h1
-        className={`text-lg font-bold ${
-          severity === "success"
-            ? "text-green-400"
-            : severity === "warning"
-              ? "text-yellow-400"
-              : "text-red-400"
-        }`}
-      >
-        {title}
-      </h1>
-      <p className="text-sm text-gray-300 leading-relaxed">{message}</p>
-      {sub && <p className="text-xs font-mono text-gray-500">{sub}</p>}
-      {badge && (
-        <span className="inline-block text-[10px] font-mono px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-          {badge}
-        </span>
-      )}
-      <p className="text-[11px] text-gray-700 pt-2">Powered by VerifyChain Africa</p>
-    </div>
-  )
 }

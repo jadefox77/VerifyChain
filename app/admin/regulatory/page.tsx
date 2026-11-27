@@ -220,7 +220,7 @@ export default async function RegulatoryPage() {
   )
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px]">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px]">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -230,7 +230,7 @@ export default async function RegulatoryPage() {
               Regulatory Intelligence View
             </h1>
           </div>
-          <p className="text-xs text-gray-500 font-mono">
+          <p className="text-xs text-gray-500">
             Read-only · NAFDAC / SON observer access ·{" "}
             {new Date().toLocaleDateString("en-NG", {
               day: "numeric",
@@ -243,7 +243,7 @@ export default async function RegulatoryPage() {
         {/* Export */}
         <a
           href="/api/admin/regulatory/export"
-          className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-mono hover:bg-gray-700 transition-colors border border-gray-700"
+          className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs hover:bg-gray-700 transition-colors border border-gray-700"
         >
           <Download className="w-3.5 h-3.5" />
           Export Report
@@ -253,7 +253,7 @@ export default async function RegulatoryPage() {
       {/* Read-only notice */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-teal-500/5 border border-teal-500/20 rounded-lg">
         <ShieldAlert className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-        <p className="text-xs text-teal-400 font-mono">
+        <p className="text-xs text-teal-400">
           This view is read-only. Data reflects live platform intelligence.
           All manufacturer activity is monitored and logged.
         </p>
@@ -275,14 +275,14 @@ export default async function RegulatoryPage() {
             accent: "text-green-400",
           },
           {
-            label: "Fraud Events — 30 Days",
+            label: "Fraud events, 30 days",
             value: data.totalFraudEvents,
             sub: "High concern + critical",
             accent:
               data.totalFraudEvents > 50 ? "text-red-400" : "text-orange-400",
           },
           {
-            label: "Critical Incidents — 90 Days",
+            label: "Critical incidents, 90 days",
             value: data.criticalIncidents,
             sub: "Requires investigation",
             accent:
@@ -293,13 +293,13 @@ export default async function RegulatoryPage() {
             key={card.label}
             className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4"
           >
-            <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-2">
+            <p className="text-xs text-gray-500 mb-2 font-medium">
               {card.label}
             </p>
-            <p className={`text-2xl font-bold font-mono ${card.accent}`}>
+            <p className={`text-2xl font-bold tabular-nums ${card.accent}`}>
               {card.value}
             </p>
-            <p className="text-[10px] text-gray-600 font-mono mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               {card.sub}
             </p>
           </div>
@@ -308,7 +308,7 @@ export default async function RegulatoryPage() {
 
       {/* Manufacturer status summary */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-        <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
+        <h2 className="text-xs text-gray-400 mb-4 font-medium">
           Manufacturer Registry Status
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -344,10 +344,10 @@ export default async function RegulatoryPage() {
             >
               <item.icon className={`w-4 h-4 ${item.color} shrink-0`} />
               <div>
-                <p className="text-[10px] font-mono text-gray-600">
+                <p className="text-xs text-gray-400">
                   {item.label}
                 </p>
-                <p className={`text-lg font-bold font-mono ${item.color}`}>
+                <p className={`text-lg font-bold tabular-nums ${item.color}`}>
                   {item.value}
                 </p>
               </div>
@@ -360,8 +360,8 @@ export default async function RegulatoryPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* 6-month fraud trend */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
-            Fraud Incident Trend — Last 6 Months
+          <h2 className="text-xs text-gray-400 mb-4 font-medium">
+            Fraud incidents, last 6 months
           </h2>
           <div className="flex items-end gap-2 h-32">
             {data.monthlyFraudTrend.map(({ month, incidents }, i) => {
@@ -375,7 +375,7 @@ export default async function RegulatoryPage() {
                   className="flex-1 flex flex-col items-center gap-1"
                 >
                   {incidents > 0 && (
-                    <span className="text-[9px] font-mono text-gray-600">
+                    <span className="text-[11px] text-gray-400">
                       {incidents}
                     </span>
                   )}
@@ -386,7 +386,7 @@ export default async function RegulatoryPage() {
                       title={`${incidents} incidents`}
                     />
                   </div>
-                  <span className="text-[9px] font-mono text-gray-700 text-center">
+                  <span className="text-[11px] text-gray-500 text-center">
                     {month.split(" ")[0]}
                   </span>
                 </div>
@@ -394,7 +394,7 @@ export default async function RegulatoryPage() {
             })}
           </div>
           <div className="mt-3 pt-3 border-t border-gray-800/40">
-            <span className="text-[10px] font-mono text-gray-600">
+            <span className="text-xs text-gray-400">
               Total incidents:{" "}
               {data.monthlyFraudTrend
                 .reduce((s, m) => s + m.incidents, 0)
@@ -406,13 +406,13 @@ export default async function RegulatoryPage() {
 
         {/* Fraud by region */}
         <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider mb-4">
-            Fraud Events by Region — Last 30 Days
+          <h2 className="text-xs text-gray-400 mb-4 font-medium">
+            Fraud events by state, last 30 days
           </h2>
           <div className="space-y-2.5">
             {data.fraudByRegion.length === 0 ? (
-              <p className="text-xs text-gray-600 font-mono">
-                No regional fraud data — location not captured in scan logs
+              <p className="text-xs text-gray-400">
+                No fraud events with a location yet. Location is only recorded when the shopper shares it.
               </p>
             ) : (
               data.fraudByRegion.map((r, i) => {
@@ -421,15 +421,15 @@ export default async function RegulatoryPage() {
                   <div key={r.region}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-gray-700 w-4">
+                        <span className="text-xs text-gray-500 w-4">
                           {i + 1}
                         </span>
-                        <MapPin className="w-3 h-3 text-gray-600" />
+                        <MapPin className="w-3 h-3 text-gray-400" />
                         <span className="text-xs text-gray-300">
                           {r.region}
                         </span>
                       </div>
-                      <span className="text-xs font-mono text-red-400">
+                      <span className="text-xs text-red-400">
                         {r._count.toLocaleString()} events
                       </span>
                     </div>
@@ -450,15 +450,16 @@ export default async function RegulatoryPage() {
       {/* Suspicious batches */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/60 flex items-center justify-between">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs text-gray-400 font-medium">
             Suspicious Batch Reports
           </h2>
-          <span className="text-[10px] font-mono text-gray-600">
+          <span className="text-xs text-gray-400">
             {data.suspiciousBatches.length} batch
             {data.suspiciousBatches.length !== 1 ? "es" : ""} flagged
           </span>
         </div>
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/40">
               {[
@@ -474,7 +475,7 @@ export default async function RegulatoryPage() {
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-2.5 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                  className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium"
                 >
                   {h}
                 </th>
@@ -486,7 +487,7 @@ export default async function RegulatoryPage() {
               <tr>
                 <td
                   colSpan={9}
-                  className="px-4 py-8 text-center text-xs text-gray-600 font-mono"
+                  className="px-4 py-8 text-center text-xs text-gray-400"
                 >
                   No suspicious batches detected
                 </td>
@@ -507,7 +508,7 @@ export default async function RegulatoryPage() {
                     className="hover:bg-gray-800/20 transition-colors"
                   >
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-300">
+                      <span className="font-mono text-xs text-gray-300">
                         {batch.batchCode}
                       </span>
                     </td>
@@ -517,42 +518,42 @@ export default async function RegulatoryPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-500">
-                        {batch.manufacturer.rcNumber ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-500">
-                        {batch.manufacturer.nafdacNumbers ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className="text-xs text-gray-400">
-                        {batch.product?.name ?? "—"}
+                      <span className="font-mono text-xs text-gray-500">
+                        {batch.manufacturer.rcNumber ?? "Not provided"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs text-gray-500">
-                        {batch.targetRegion ?? "—"}
+                        {batch.manufacturer.nafdacNumbers ?? "Not provided"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-400">
+                      <span className="text-xs text-gray-400">
+                        {batch.product?.name ?? "No product"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-xs text-gray-500">
+                        {batch.targetRegion ?? "Any"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-xs text-gray-400">
                         {batch.bottleCount.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <div>
-                        <span className="text-xs font-mono text-red-400">
+                        <span className="text-xs text-red-400">
                           {batch.flaggedCount.toLocaleString()}
                         </span>
-                        <span className="text-[9px] font-mono text-gray-600 ml-1">
+                        <span className="text-[11px] text-gray-400 ml-1">
                           ({flagPct}%)
                         </span>
                       </div>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-600">
+                      <span className="text-xs text-gray-400">
                         {new Date(batch.createdAt).toLocaleDateString(
                           "en-NG",
                           {
@@ -569,16 +570,18 @@ export default async function RegulatoryPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Manufacturer compliance table */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/60">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs text-gray-400 font-medium">
             Manufacturer Compliance Monitor
           </h2>
         </div>
-        <table className="w-full">
+        <div className="table-scroll">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-gray-800/40">
               {[
@@ -593,7 +596,7 @@ export default async function RegulatoryPage() {
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-2.5 text-left text-[10px] font-mono text-gray-600 uppercase tracking-wider"
+                  className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium"
                 >
                   {h}
                 </th>
@@ -605,7 +608,7 @@ export default async function RegulatoryPage() {
               <tr>
                 <td
                   colSpan={8}
-                  className="px-4 py-8 text-center text-xs text-gray-600 font-mono"
+                  className="px-4 py-8 text-center text-xs text-gray-400"
                 >
                   No active manufacturers
                 </td>
@@ -630,12 +633,12 @@ export default async function RegulatoryPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-500">
-                        {m.rcNumber ?? "—"}
+                      <span className="font-mono text-xs text-gray-500">
+                        {m.rcNumber ?? "Not provided"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-500 max-w-[140px] truncate block">
+                      <span className="text-xs text-gray-500 max-w-[140px] truncate block">
                         {m.nafdacNumbers ?? "Not provided"}
                       </span>
                     </td>
@@ -646,19 +649,19 @@ export default async function RegulatoryPage() {
                     </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`text-xs font-mono font-bold ${fraudAccent}`}
+                        className={`text-xs font-bold ${fraudAccent}`}
                       >
                         {m.fraudRateCached.toFixed(1)}%
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-400">
+                      <span className="text-xs text-gray-400">
                         {m.totalBottlesGenerated.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                        className={`text-xs px-1.5 py-0.5 rounded border ${
                           m.subscriptionStatus === "ACTIVE"
                             ? "bg-green-500/10 text-green-400 border-green-500/20"
                             : m.subscriptionStatus === "SUSPENDED"
@@ -670,7 +673,7 @@ export default async function RegulatoryPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-xs font-mono text-gray-600">
+                      <span className="text-xs text-gray-400">
                         {new Date(m.createdAt).toLocaleDateString("en-NG", {
                           day: "numeric",
                           month: "short",
@@ -684,20 +687,21 @@ export default async function RegulatoryPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Recent incidents */}
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl">
         <div className="px-4 py-3 border-b border-gray-800/60">
-          <h2 className="text-xs font-mono text-gray-400 uppercase tracking-wider">
-            Counterfeit Incident Timeline — Last 90 Days
+          <h2 className="text-xs text-gray-400 font-medium">
+            Counterfeit incidents, last 90 days
           </h2>
         </div>
         <div className="divide-y divide-gray-800/40">
           {data.recentIncidents.length === 0 ? (
             <div className="px-4 py-8 text-center">
               <CheckCircle2 className="w-6 h-6 text-green-500 mx-auto mb-2" />
-              <p className="text-xs text-gray-600 font-mono">
+              <p className="text-xs text-gray-400">
                 No critical or high concern incidents in the last 90 days
               </p>
             </div>
@@ -711,7 +715,7 @@ export default async function RegulatoryPage() {
                 >
                   <div className="shrink-0 mt-0.5">
                     <span
-                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${config.badge}`}
+                      className={`text-[11px] px-1.5 py-0.5 rounded border ${config.badge}`}
                     >
                       {config.label}
                     </span>
@@ -721,29 +725,29 @@ export default async function RegulatoryPage() {
                       {incident.message}
                     </p>
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-[10px] font-mono text-gray-600">
+                      <span className="text-xs text-gray-400">
                         {incident.manufacturer?.companyName ?? "Platform-wide"}
                       </span>
                       {incident.manufacturer?.rcNumber && (
                         <>
-                          <span className="text-gray-700">·</span>
-                          <span className="text-[10px] font-mono text-gray-600">
+                          <span className="text-gray-500">·</span>
+                          <span className="text-xs text-gray-400">
                             RC: {incident.manufacturer.rcNumber}
                           </span>
                         </>
                       )}
                       {incident.region && (
                         <>
-                          <span className="text-gray-700">·</span>
-                          <span className="text-[10px] font-mono text-gray-600">
+                          <span className="text-gray-500">·</span>
+                          <span className="text-xs text-gray-400">
                             {incident.region}
                           </span>
                         </>
                       )}
                       {incident.confidenceScore && (
                         <>
-                          <span className="text-gray-700">·</span>
-                          <span className="text-[10px] font-mono text-gray-600">
+                          <span className="text-gray-500">·</span>
+                          <span className="text-xs text-gray-400">
                             {Math.round(incident.confidenceScore * 100)}%
                             confidence
                           </span>
@@ -751,7 +755,7 @@ export default async function RegulatoryPage() {
                       )}
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-700 shrink-0">
+                  <span className="text-xs text-gray-500 shrink-0">
                     {new Date(incident.createdAt).toLocaleDateString("en-NG", {
                       day: "numeric",
                       month: "short",

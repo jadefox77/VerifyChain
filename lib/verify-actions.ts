@@ -9,7 +9,7 @@ import { verifyRatelimit } from "@/lib/ratelimit"
 import { getRequestMeta } from "@/lib/request-meta"
 
 // The bottle the consumer scanned is remembered for 10 minutes, so the cap
-// scan can be checked against it. This replaces the old WhatsApp session.
+// scan can be checked against it.
 const BOTTLE_COOKIE = "vc_bottle"
 const BOTTLE_COOKIE_MAX_AGE = 10 * 60
 
@@ -34,7 +34,7 @@ export type CapActionResult =
   | { status: "NEEDS_BOTTLE"; message: string }
 
 const INVALID_QR =
-  "Invalid or tampered QR code. This product may be counterfeit."
+  "This code is not valid. It may have been altered, or the product may not be genuine."
 
 async function guard(): Promise<{ meta: Awaited<ReturnType<typeof getRequestMeta>> } | RateLimited> {
   const meta = await getRequestMeta()
@@ -42,7 +42,7 @@ async function guard(): Promise<{ meta: Awaited<ReturnType<typeof getRequestMeta
   if (!success) {
     return {
       status: "RATE_LIMITED",
-      message: "Too many verification attempts. Please wait a minute and try again.",
+      message: "Too many checks from this connection. Wait a minute, then try again.",
     }
   }
   return { meta }

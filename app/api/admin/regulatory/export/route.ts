@@ -1,8 +1,7 @@
 import { getAdminSession, canViewRegulatory } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
-import { NextRequest } from "next/server"
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getAdminSession()
   if (!session || !canViewRegulatory(session.user.role)) {
     return Response.json({ error: "Unauthorized" }, { status: 403 })

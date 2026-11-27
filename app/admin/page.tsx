@@ -1,414 +1,234 @@
+import type { Metadata } from "next"
+import Link from "next/link"
+import { Bell, Building2, Package, ScanLine, ShieldCheck, ShieldAlert, TrendingUp } from "lucide-react"
 import { requireAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
-import {
-  Shield,
-  Activity,
-  AlertTriangle,
-  Building2,
-  Package,
-  Scan,
-  TrendingUp,
-  Zap,
-} from "lucide-react"
+import { PageHeader } from "@/components/ui/page-header"
+import { StatCard } from "@/components/ui/stat-card"
+import { Badge } from "@/components/ui/badge"
+import { EmptyState } from "@/components/ui/empty-state"
+import { card, cardHeader, cardTitle } from "@/lib/ui"
+import { timeAgo } from "@/lib/format"
+import { SEVERITY, ALERT_TYPE_LABELS } from "@/lib/alerts"
+
+export const metadata: Metadata = { title: "Overview" }
 
 export const revalidate = 30
 
-// ── Data fetchers ─────────────────────────────────────────────────────────────
+const DAY = 24 * 60 * 60 * 1000
 
-async function getCommandCenterMetrics() {
+async function getOverview() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const verificationsToday = await prisma.scanLog.count({
-    where: { scannedAt: { gte: today } },
-  })
-
-  const activeManufacturers = await prisma.manufacturer.count({
-    where: { onboardingStatus: "ACTIVE_PRODUCTION" },
-  })
-
-  const fraudAlertsToday = await prisma.alertLog.count({
-    where: {
-      createdAt: { gte: today },
-      resolved: false,
-    },
-  })
-
-  const criticalAlerts = await prisma.alertLog.count({
-    where: {
-      severity: { in: ["HIGH_CONCERN", "CRITICAL"] },
-      resolved: false,
-    },
-  })
-
-  const activeBatches = await prisma.batch.count({
-    where: {
-      createdAt: {
-        gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      },
-    },
-  })
-
-  const openedBottlesToday = await prisma.bottle.count({
-    where: {
-      status: "OPENED",
-      updatedAt: { gte: today },
-    },
-  })
-
-  const recentAlerts = await prisma.alertLog.findMany({
-    where: { resolved: false },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-    include: {
-      manufacturer: { select: { companyName: true } },
-    },
-  })
+  const [
+    scansToday,
+    flaggedScansToday,
+    activeManufacturers,
+    pendingReview,
+    alertsToday,
+    highPriorityOpen,
+    batchesLast30,
+    openedToday,
+    recentAlerts,
+  ] = await Promise.all([
+    prisma.scanLog.count({ where: { scannedAt: { gte: today } } }),
+    prisma.scanLog.count({ where: { scannedAt: { gte: today }, fraudFlag: true } }),
+    prisma.manufacturer.count({ where: { onboardingStatus: "ACTIVE_PRODUCTION" } }),
+    prisma.manufacturer.count({ where: { onboardingStatus: "PENDING_REVIEW" } }),
+    prisma.alertLog.count({ where: { createdAt: { gte: today }, resolved: false } }),
+    prisma.alertLog.count({ where: { severity: { in: ["HIGH_CONCERN", "CRITICAL"] }, resolved: false } }),
+    prisma.batch.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * DAY) } } }),
+    prisma.bottle.count({ where: { status: "OPENED", updatedAt: { gte: today } } }),
+    prisma.alertLog.findMany({
+      where: { resolved: false },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      include: { manufacturer: { select: { companyName: true } } },
+    }),
+  ])
 
   return {
-    verificationsToday,
+    scansToday,
+    flaggedScansToday,
+    flaggedRateToday: scansToday > 0 ? (flaggedScansToday / scansToday) * 100 : 0,
     activeManufacturers,
-    fraudAlertsToday,
-    criticalAlerts,
-    activeBatches,
-    openedBottlesToday,
-    platformFraudRate: 0, // computed by fraud pipeline, not inline
+    pendingReview,
+    alertsToday,
+    highPriorityOpen,
+    batchesLast30,
+    openedToday,
     recentAlerts,
   }
 }
 
-// ── Severity config ───────────────────────────────────────────────────────────
-
-const SEVERITY_CONFIG = {
-  SAFE: {
-    dot: "bg-green-500",
-    badge: "bg-green-500/10 text-green-400 border-green-500/20",
-    label: "Safe",
-  },
-  SUSPICIOUS: {
-    dot: "bg-yellow-500",
-    badge: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-    label: "Suspicious",
-  },
-  HIGH_CONCERN: {
-    dot: "bg-orange-500",
-    badge: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    label: "High Concern",
-  },
-  CRITICAL: {
-    dot: "bg-red-500 animate-pulse",
-    badge: "bg-red-500/10 text-red-400 border-red-500/20",
-    label: "Critical",
-  },
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function MetricCard({
-  label,
-  value,
-  icon: Icon,
-  sub,
-  accent = "blue",
-  mono = true,
-}: {
-  label: string
-  value: string | number
-  icon: React.ElementType
-  sub?: string
-  accent?: "blue" | "red" | "green" | "orange" | "purple"
-  mono?: boolean
-}) {
-  const colors = {
-    blue: "text-blue-400 bg-blue-500/10 border-blue-500/20",
-    red: "text-red-400 bg-red-500/10 border-red-500/20",
-    green: "text-green-400 bg-green-500/10 border-green-500/20",
-    orange: "text-orange-400 bg-orange-500/10 border-orange-500/20",
-    purple: "text-purple-400 bg-purple-500/10 border-purple-500/20",
-  }
-
-  return (
-    <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl p-4 hover:border-gray-700/60 transition-colors">
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-xs text-gray-500 uppercase tracking-wider font-mono">
-          {label}
-        </p>
-        <div className={`p-1.5 rounded-lg border ${colors[accent]}`}>
-          <Icon className="w-3.5 h-3.5" />
-        </div>
-      </div>
-      <p className={`text-2xl font-bold text-white ${mono ? "font-mono" : ""}`}>
-        {typeof value === "number" ? value.toLocaleString() : value}
-      </p>
-      {sub && (
-        <p className="text-[11px] text-gray-600 mt-1 font-mono">{sub}</p>
-      )}
-    </div>
-  )
-}
-
-function AlertFeedItem({
-  alert,
-}: {
-  alert: Awaited<ReturnType<typeof getCommandCenterMetrics>>["recentAlerts"][0]
-}) {
-  const config = SEVERITY_CONFIG[alert.severity]
-  const timeAgo = formatTimeAgo(alert.createdAt)
-
-  return (
-    <div className="flex items-start gap-3 py-3 border-b border-gray-800/40 last:border-0">
-      <div className="mt-1.5 shrink-0">
-        <div className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span
-            className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${config.badge}`}
-          >
-            {config.label}
-          </span>
-          <span className="text-[10px] font-mono text-gray-600 truncate">
-            {alert.type.replace(/_/g, " ")}
-          </span>
-        </div>
-        <p className="text-xs text-gray-300 truncate">{alert.message}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] text-gray-600 font-mono">
-            {alert.manufacturer?.companyName ?? "Platform-wide"}
-          </span>
-          <span className="text-[10px] text-gray-700">·</span>
-          <span className="text-[10px] text-gray-600 font-mono">{timeAgo}</span>
-          {alert.confidenceScore && (
-            <>
-              <span className="text-[10px] text-gray-700">·</span>
-              <span className="text-[10px] text-gray-600 font-mono">
-                {Math.round(alert.confidenceScore * 100)}% confidence
-              </span>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function formatTimeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────────
-
-export default async function AdminCommandCenter() {
-  await requireAdmin()
-  const metrics = await getCommandCenterMetrics()
-
-  const fraudRateDisplay =
-    metrics.platformFraudRate > 0
-      ? `${metrics.platformFraudRate.toFixed(1)}%`
-      : "0.0%"
-
-  const fraudAccent =
-    metrics.criticalAlerts > 0
-      ? "red"
-      : metrics.fraudAlertsToday > 5
-      ? "orange"
-      : "green"
-
-  return (
-    <div className="p-6 space-y-6 max-w-[1600px]">
-      {/* Page header */}
-      <div>
-        <h1 className="text-lg font-bold text-white tracking-tight">
-          Command Center
-        </h1>
-        <p className="text-xs text-gray-500 font-mono mt-0.5">
-          Platform-wide operational intelligence · Auto-refresh every 30s
-        </p>
-      </div>
-
-      {/* Metric grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard
-          label="Verifications Today"
-          value={metrics.verificationsToday}
-          icon={Scan}
-          sub="All channels"
-          accent="blue"
-        />
-        <MetricCard
-          label="Active Manufacturers"
-          value={metrics.activeManufacturers}
-          icon={Building2}
-          sub="In production"
-          accent="green"
-        />
-        <MetricCard
-          label="Fraud Alerts"
-          value={metrics.fraudAlertsToday}
-          icon={AlertTriangle}
-          sub={`${metrics.criticalAlerts} critical unresolved`}
-          accent={fraudAccent}
-        />
-        <MetricCard
-          label="Fraud Rate"
-          value={fraudRateDisplay}
-          icon={TrendingUp}
-          sub="Platform avg today"
-          accent={metrics.platformFraudRate > 10 ? "red" : "purple"}
-        />
-        <MetricCard
-          label="Active Batches"
-          value={metrics.activeBatches}
-          icon={Package}
-          sub="Last 30 days"
-          accent="blue"
-        />
-        <MetricCard
-          label="Bottles Opened Today"
-          value={metrics.openedBottlesToday}
-          icon={Zap}
-          sub="First-open events"
-          accent="green"
-        />
-      </div>
-
-      {/* Main content — alert feed + placeholder for charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Live alert feed */}
-        <div className="lg:col-span-1 bg-gray-900/60 border border-gray-800/60 rounded-xl">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-              </span>
-              <h2 className="text-xs font-mono text-gray-300 uppercase tracking-wider">
-                Live Alert Feed
-              </h2>
-            </div>
-            <a
-              href="/admin/alerts"
-              className="text-[10px] text-blue-400 hover:text-blue-300 font-mono transition-colors"
-            >
-              View all →
-            </a>
-          </div>
-
-          <div className="px-4 divide-y divide-gray-800/40">
-            {metrics.recentAlerts.length === 0 ? (
-              <div className="py-8 text-center">
-                <Shield className="w-6 h-6 text-green-500 mx-auto mb-2" />
-                <p className="text-xs text-gray-500 font-mono">
-                  No active alerts
-                </p>
-              </div>
-            ) : (
-              metrics.recentAlerts.map((alert) => (
-                <AlertFeedItem key={alert.id} alert={alert} />
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Verification volume placeholder — wire up with chart library in Phase 4 */}
-        <div className="lg:col-span-2 bg-gray-900/60 border border-gray-800/60 rounded-xl">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60">
-            <div className="flex items-center gap-2">
-              <Activity className="w-3.5 h-3.5 text-blue-400" />
-              <h2 className="text-xs font-mono text-gray-300 uppercase tracking-wider">
-                Verification Volume — Last 7 Days
-              </h2>
-            </div>
-          </div>
-          <div className="px-4 py-3">
-            <VerificationSparklines />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Inline sparklines (pure CSS, no chart lib dependency yet) ─────────────────
-
-async function VerificationSparklines() {
-  const counts: number[] = []
-  const fraudCounts: number[] = []
-
-  for (let i = 0; i < 7; i++) {
+async function getWeek() {
+  const days = Array.from({ length: 7 }, (_, i) => {
     const day = new Date()
     day.setDate(day.getDate() - (6 - i))
     day.setHours(0, 0, 0, 0)
     const next = new Date(day)
     next.setDate(next.getDate() + 1)
+    return { day, next }
+  })
 
-    const total = await prisma.scanLog.count({
-      where: { scannedAt: { gte: day, lt: next } },
-    })
-    const fraud = await prisma.scanLog.count({
-      where: { scannedAt: { gte: day, lt: next }, fraudFlag: true },
-    })
-
-    counts.push(total)
-    fraudCounts.push(fraud)
-  }
-
-  const max = Math.max(...counts, 1)
-
-  const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-  const todayIndex = new Date().getDay()
-  const orderedLabels = Array.from(
-    { length: 7 },
-    (_, i) => dayLabels[(todayIndex - 6 + i + 7) % 7]
+  const counts = await Promise.all(
+    days.map(({ day, next }) =>
+      Promise.all([
+        prisma.scanLog.count({ where: { scannedAt: { gte: day, lt: next } } }),
+        prisma.scanLog.count({ where: { scannedAt: { gte: day, lt: next }, fraudFlag: true } }),
+      ])
+    )
   )
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-end gap-2 h-32">
-        {counts.map((count, i) => {
-          const heightPct = Math.max((count / max) * 100, 2)
-          const fraudPct =
-            count > 0 ? (fraudCounts[i] / count) * heightPct : 0
+  return days.map(({ day }, i) => ({
+    label: day.toLocaleDateString("en-NG", { weekday: "short" }),
+    total: counts[i][0],
+    flagged: counts[i][1],
+  }))
+}
 
+export default async function AdminOverviewPage() {
+  await requireAdmin()
+  const [m, week] = await Promise.all([getOverview(), getWeek()])
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <PageHeader
+        title="Overview"
+        description="Activity across all manufacturers today."
+      />
+
+      {m.highPriorityOpen > 0 && (
+        <Link
+          href="/admin/alerts"
+          className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 transition-colors hover:bg-red-500/15"
+        >
+          <ShieldAlert className="h-5 w-5 shrink-0 text-red-400" aria-hidden="true" />
+          <p className="flex-1 text-sm text-red-100">
+            <span className="font-semibold">
+              {m.highPriorityOpen} high-priority {m.highPriorityOpen === 1 ? "alert is" : "alerts are"} open.
+            </span>{" "}
+            Review them in Alerts.
+          </p>
+        </Link>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <StatCard label="Scans today" value={m.scansToday.toLocaleString()} hint="All channels" icon={ScanLine} />
+        <StatCard
+          label="Flagged scans today"
+          value={`${m.flaggedRateToday.toFixed(1)}%`}
+          hint={`${m.flaggedScansToday.toLocaleString()} of ${m.scansToday.toLocaleString()} scans`}
+          icon={TrendingUp}
+          tone={m.flaggedRateToday > 10 ? "bad" : m.flaggedRateToday > 5 ? "warn" : "neutral"}
+        />
+        <StatCard
+          label="Open alerts raised today"
+          value={m.alertsToday.toLocaleString()}
+          hint={`${m.highPriorityOpen} high priority open in total`}
+          icon={Bell}
+          tone={m.highPriorityOpen > 0 ? "bad" : "neutral"}
+        />
+        <StatCard
+          label="Live manufacturers"
+          value={m.activeManufacturers.toLocaleString()}
+          hint={`${m.pendingReview} waiting for review`}
+          icon={Building2}
+        />
+        <StatCard label="Batches, last 30 days" value={m.batchesLast30.toLocaleString()} icon={Package} />
+        <StatCard label="First openings today" value={m.openedToday.toLocaleString()} hint="Units verified as genuine" icon={ShieldCheck} tone="good" />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-5">
+        <section className={`${card} lg:col-span-2`}>
+          <div className={cardHeader}>
+            <h2 className={cardTitle}>Latest open alerts</h2>
+            <Link href="/admin/alerts" className="text-sm font-medium text-brand-400 hover:underline">
+              View all
+            </Link>
+          </div>
+          {m.recentAlerts.length === 0 ? (
+            <EmptyState icon={ShieldCheck} title="No open alerts" description="New alerts from the daily fraud checks will show here." />
+          ) : (
+            <ul className="divide-y divide-gray-800">
+              {m.recentAlerts.map((alert) => {
+                const sev = SEVERITY[alert.severity]
+                return (
+                  <li key={alert.id} className="px-5 py-3.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={sev.tone}>{sev.label}</Badge>
+                      <span className="text-xs text-gray-400">{ALERT_TYPE_LABELS[alert.type] ?? alert.type}</span>
+                    </div>
+                    <p className="mt-1.5 line-clamp-2 text-sm text-gray-200">{alert.message}</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {alert.manufacturer?.companyName ?? "All manufacturers"} · {timeAgo(alert.createdAt)}
+                      {alert.confidenceScore ? ` · ${Math.round(alert.confidenceScore * 100)}% confidence` : ""}
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+
+        <section className={`${card} lg:col-span-3`}>
+          <div className={cardHeader}>
+            <h2 className={cardTitle}>Scans, last 7 days</h2>
+            <span className="text-xs text-gray-400">
+              {week.reduce((a, d) => a + d.total, 0).toLocaleString()} total
+            </span>
+          </div>
+          <div className="p-5">
+            <WeekChart days={week} />
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function WeekChart({ days }: { days: { label: string; total: number; flagged: number }[] }) {
+  const max = Math.max(...days.map((d) => d.total), 1)
+  return (
+    <figure>
+      <div
+        className="flex h-40 items-end gap-2"
+        role="img"
+        aria-label={days.map((d) => `${d.label}: ${d.total} scans, ${d.flagged} flagged`).join("; ")}
+      >
+        {days.map((d, i) => {
+          const h = (d.total / max) * 100
+          const flaggedShare = d.total > 0 ? (d.flagged / d.total) * 100 : 0
           return (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <div className="w-full flex flex-col justify-end h-24 gap-0.5">
-                <div
-                  className="w-full bg-red-500/40 rounded-t-sm transition-all"
-                  style={{ height: `${fraudPct}%` }}
-                />
-                <div
-                  className="w-full bg-blue-500/40 rounded-t-sm transition-all"
-                  style={{ height: `${heightPct - fraudPct}%` }}
-                />
+            <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
+              <span className="text-xs tabular-nums text-gray-400">{d.total > 0 ? d.total.toLocaleString() : ""}</span>
+              <div
+                className="flex w-full max-w-12 flex-col overflow-hidden rounded-t-md bg-gray-800"
+                style={{ height: `${Math.max(h, 2)}%` }}
+              >
+                <div className="w-full bg-red-500/80" style={{ height: `${flaggedShare}%` }} />
+                <div className="w-full flex-1 bg-brand-500/70" style={{ display: d.total > 0 ? undefined : "none" }} />
               </div>
-              <span className="text-[9px] font-mono text-gray-600">
-                {orderedLabels[i]}
-              </span>
             </div>
           )
         })}
       </div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-blue-500/40" />
-            <span className="text-[10px] font-mono text-gray-500">Genuine</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-red-500/40" />
-            <span className="text-[10px] font-mono text-gray-500">Fraudulent</span>
-          </div>
-        </div>
-        <span className="text-[10px] font-mono text-gray-600">
-          {counts.reduce((a, b) => a + b, 0).toLocaleString()} total this week
-        </span>
+      <div className="mt-2 flex gap-2">
+        {days.map((d, i) => (
+          <span key={i} className="flex-1 text-center text-xs text-gray-500">
+            {d.label}
+          </span>
+        ))}
       </div>
-    </div>
+      <figcaption className="mt-4 flex items-center gap-4 text-xs text-gray-400">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm bg-brand-500/70" aria-hidden="true" /> Genuine
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm bg-red-500/80" aria-hidden="true" /> Flagged
+        </span>
+      </figcaption>
+    </figure>
   )
 }

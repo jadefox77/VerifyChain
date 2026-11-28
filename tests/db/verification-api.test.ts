@@ -196,6 +196,18 @@ describe.skipIf(!TEST_DB)("verification API (database)", () => {
     expect(other.check.reason).toBe("cap_already_opened")
   })
 
+  it("does not call a secret-key re-check the same shopper without shopper_ip", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "APINOIP1", withCap: "CAPAPINOIP1XXXXX" })
+    const { key } = await makeKey(manufacturer.id, "SECRET")
+    const body = { code: buildCapVerifyUrl("CAPAPINOIP1XXXXX", "APINOIP1"), bottle_code: "APINOIP1" }
+
+    expect((await (await handleVerify(call("/api/v1/verify/cap", key, body), "cap")).json()).status).toBe("authentic")
+    const again = await (await handleVerify(call("/api/v1/verify/cap", key, body), "cap")).json()
+    expect(again.status).toBe("already_verified")
+    expect(again.check.reason).toBe("cap_already_opened")
+  })
+
   it("answers authentic_unpaired, not authentic, when no bottle_code is sent", async () => {
     const { manufacturer } = await makeManufacturer()
     await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "APINOB1", withCap: "CAPAPINOB1XXXXXX" })

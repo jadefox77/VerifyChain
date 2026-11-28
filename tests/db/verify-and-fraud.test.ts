@@ -217,6 +217,31 @@ describe.skipIf(!TEST_DB)("verification and fraud rules (database)", () => {
     expect((await prisma.bottle.findUniqueOrThrow({ where: { id: bottle.id } })).status).toBe("OPENED")
   })
 
+  it("treats two simultaneous checks from one phone as one shopper, not a reused cap", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "RACE1", withCap: "CAPRACE1XXXXXXXX" })
+    const meta = { deviceHash: "phone-race" }
+
+    const results = await Promise.all(
+      [0, 1, 2].map(() => verifyCapDetailed({ hiddenSerialId: "CAPRACE1XXXXXXXX", bottleSerialIds: ["RACE1"], meta }))
+    )
+    const statuses = results.map((r) => r.result.status).sort()
+    expect(statuses).toEqual(["ALREADY_CHECKED", "ALREADY_CHECKED", "GENUINE"])
+    const cap = await prisma.cap.findUniqueOrThrow({ where: { hiddenSerialId: "CAPRACE1XXXXXXXX" } })
+    expect(cap.status).toBe("OPENED")
+    expect(await prisma.scanLog.count({ where: { capId: cap.id, fraudFlag: true } })).toBe(0)
+  })
+
+  it("never treats a check with no device and no IP as the same shopper", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "NOSRC1", withCap: "CAPNOSRC1XXXXXXX" })
+    // As a secret API key with no shopper_ip: no device, no IP
+    const meta = { channel: "api" }
+
+    expect((await verifyCapDetailed({ hiddenSerialId: "CAPNOSRC1XXXXXXX", bottleSerialIds: ["NOSRC1"], meta })).result.status).toBe("GENUINE")
+    expect((await verifyCapDetailed({ hiddenSerialId: "CAPNOSRC1XXXXXXX", bottleSerialIds: ["NOSRC1"], meta })).result.status).toBe("WARNING")
+  })
+
   it("still flags an opened cap scanned from another phone, or a day later", async () => {
     const { manufacturer } = await makeManufacturer()
     await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "REUSE1", withCap: "CAPREUSE1XXXXXXX" })

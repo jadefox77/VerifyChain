@@ -136,9 +136,7 @@ async function checkCap(
   const bottle = cap.bottle
   const bottleId = cap.bottleId
 
-  const logScan = (fraudFlag: boolean, flagReason: string | null) =>
-    prisma.scanLog.create({
-      data: {
+  const scanData = (fraudFlag: boolean, flagReason: string | null): Prisma.ScanLogUncheckedCreateInput => ({
         capId: cap.id,
         bottleId,
         manufacturerId: bottle.manufacturerId,
@@ -153,8 +151,9 @@ async function checkCap(
         deviceHash: meta?.deviceHash ?? null,
         userAgent: meta?.userAgent ?? null,
         apiKeyId: meta?.apiKeyId ?? null,
-      },
-    })
+  })
+  const logScan = (fraudFlag: boolean, flagReason: string | null) =>
+    prisma.scanLog.create({ data: scanData(fraudFlag, flagReason) })
 
   // A cap flagged after a repeated mismatch (never opened) stays refused,
   // whatever label comes with it. The bottle's own label scan also reports it.
@@ -239,12 +238,24 @@ async function checkCap(
   // Atomic first-open claim
   // Only one request can move the cap out of SEALED. If two people scan the
   // same cap at the same moment, the second one sees count === 0.
+  // The opening scan is logged in the same transaction. A second request
+  // waits on the cap's row lock until this commits, so when it looks for the
+  // opening scan (to tell a re-check by the same shopper from a reused cap),
+  // the log is always there.
+  // A soft drift is logged with its reason but is not a fraud flag, so it
+  // does not count toward the brand's fraud rate.
   const now = new Date()
-  const claim = await prisma.cap.updateMany({
-    where: { id: cap.id, status: "SEALED" },
-    data: { status: hardDrift ? "FLAGGED" : "OPENED", openedAt: now },
+  const firstOpen = await prisma.$transaction(async (tx) => {
+    const claim = await tx.cap.updateMany({
+      where: { id: cap.id, status: "SEALED" },
+      data: { status: hardDrift ? "FLAGGED" : "OPENED", openedAt: now },
+    })
+    if (claim.count !== 1) return false
+    await tx.scanLog.create({
+      data: scanData(hardDrift, driftReason ? (hardDrift ? `${driftReason} (repeated drift)` : driftReason) : null),
+    })
+    return true
   })
-  const firstOpen = claim.count === 1
 
   if (!firstOpen) {
     // Already opened before (or by a concurrent scan a moment ago). If the
@@ -280,9 +291,6 @@ async function checkCap(
     }
   }
 
-  // A soft drift is logged with its reason but is not a fraud flag, so it
-  // does not count toward the brand's fraud rate.
-  await logScan(hardDrift, driftReason ? (hardDrift ? `${driftReason} (repeated drift)` : driftReason) : null)
   await prisma.bottle.updateMany({
     where: { id: bottleId, status: "MINT" },
     data: { status: hardDrift ? "FLAGGED" : "OPENED" },
@@ -335,7 +343,9 @@ async function hasOpenMismatchAlert(capId: string, batchId: string): Promise<boo
 
 // Did the scan that opened this cap come from the same source as this one,
 // within SAME_SHOPPER_RECHECK_MS of the opening? The source is the device when
-// this scan has one, otherwise the hashed IP, otherwise the API key. The
+// this scan has one, otherwise the hashed IP. With neither (a secret API key
+// that sent no shopper_ip) it is never the same shopper: the key is shared by
+// every shopper of that brand, so it cannot tell them apart. The
 // opening scan is the first cap scan logged at or after openedAt that was not
 // a refused mismatch.
 async function openedBySameSource(capId: string, openedAt: Date, meta?: ScanMeta): Promise<boolean> {
@@ -353,7 +363,6 @@ async function openedBySameSource(capId: string, openedAt: Date, meta?: ScanMeta
   if (!opener) return false
   if (meta?.deviceHash) return opener.deviceHash === meta.deviceHash
   if (meta?.ipHash) return opener.ipHash === meta.ipHash
-  if (meta?.apiKeyId) return opener.apiKeyId === meta.apiKeyId
   return false
 }
 

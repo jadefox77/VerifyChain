@@ -245,8 +245,8 @@ export function capToApi(r: CapVerifyResult): ApiVerification {
         next_step: null,
       }
     case "ALREADY_CHECKED":
-      // The same shopper checking again (same IP, or same key when no shopper
-      // IP is known) within 24 hours of opening. Nothing was flagged.
+      // The same shopper (same IP) checking again within 24 hours of opening.
+      // Nothing was flagged. Never returned to a secret key without shopper_ip.
       return {
         status: "already_verified",
         message: r.message,

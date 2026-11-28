@@ -122,6 +122,12 @@ export function canResolveAlerts(role: UserRole): boolean {
   return hasRole(role, FRAUD_ROLES);
 }
 
+// Restoring a flagged product (cap and bottle) is done by the same people
+// who resolve alerts. Regulatory observers stay read-only.
+export function canRestoreProducts(role: UserRole): boolean {
+  return hasRole(role, FRAUD_ROLES);
+}
+
 export function canManageUsers(role: UserRole): boolean {
   return hasRole(role, SUPER_ADMIN_ONLY);
 }

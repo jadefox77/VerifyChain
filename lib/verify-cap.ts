@@ -322,12 +322,21 @@ async function isRepeatMismatch(capId: string, meta?: ScanMeta): Promise<boolean
         ? { apiKeyId: meta.apiKeyId }
         : null
   if (!source) return false
+  // Mismatches before staff last resolved (or restored) this cap's alert do
+  // not count, so a restored cap gets a fresh retry.
+  let since = new Date(Date.now() - MISMATCH_REPEAT_WINDOW_MS)
+  const lastResolved = await prisma.alertLog.findFirst({
+    where: { type: "INVALID_PAIRING", resolved: true, resolvedAt: { gt: since }, detail: { contains: capId } },
+    orderBy: { resolvedAt: "desc" },
+    select: { resolvedAt: true },
+  })
+  if (lastResolved?.resolvedAt) since = lastResolved.resolvedAt
   const prior = await prisma.scanLog.findFirst({
     where: {
       capId,
       ...source,
       flagReason: { in: [MISMATCH_FIRST, MISMATCH_AGAIN] },
-      scannedAt: { gte: new Date(Date.now() - MISMATCH_REPEAT_WINDOW_MS) },
+      scannedAt: { gte: since },
     },
     select: { id: true },
   })

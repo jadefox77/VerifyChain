@@ -1,4 +1,5 @@
-import { requireAdmin, canResolveAlerts } from "@/lib/admin-auth"
+import { requireAdmin, canResolveAlerts, canRestoreProducts } from "@/lib/admin-auth"
+import { REASON_MAX, REASON_MIN, RESTORABLE_ALERT_TYPES } from "@/lib/restore"
 import { prisma } from "@/lib/prisma"
 import type { Metadata } from "next"
 import Link from "next/link"
@@ -141,6 +142,8 @@ export default async function AlertsPage({
     resolved?: string
     manufacturerId?: string
     page?: string
+    restored?: string
+    restore_error?: string
   }>
 }) {
   const session = await requireAdmin()
@@ -162,6 +165,17 @@ export default async function AlertsPage({
   ])
 
   const canResolve = canResolveAlerts(session.user.role)
+  const canRestore = canRestoreProducts(session.user.role)
+  const restorable = (type: string) => (RESTORABLE_ALERT_TYPES as readonly string[]).includes(type)
+
+  const restoredCount = params.restored !== undefined ? parseInt(params.restored, 10) : null
+  const RESTORE_ERRORS: Record<string, string> = {
+    bad_reason: `Write a reason of at least ${REASON_MIN} characters to restore products.`,
+    not_found: "That alert no longer exists.",
+    wrong_type: "Only cap mismatch and outside-target-state alerts can restore products.",
+    nothing_to_restore: "Nothing to restore: the products for this alert are not flagged.",
+  }
+  const restoreError = params.restore_error ? (RESTORE_ERRORS[params.restore_error] ?? "Restore failed.") : null
 
   // Build query string helper for pagination
   const buildQuery = (overrides: Record<string, string>) => {
@@ -199,6 +213,19 @@ export default async function AlertsPage({
           Export CSV
         </a>
       </div>
+
+      {restoredCount !== null && Number.isFinite(restoredCount) && (
+        <p role="status" className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs text-green-300">
+          {restoredCount === 0
+            ? "Alert resolved. No products were flagged, so none needed restoring."
+            : `Restored ${restoredCount} product${restoredCount === 1 ? "" : "s"} and resolved the alert. The reason is in the audit log.`}
+        </p>
+      )}
+      {restoreError && (
+        <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {restoreError}
+        </p>
+      )}
 
       {/* Summary counts */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -462,6 +489,41 @@ export default async function AlertsPage({
                             Resolve
                           </button>
                         </form>
+                      )}
+                      {canRestore && restorable(alert.type) && (
+                        <details className="mt-2 text-xs">
+                          <summary className="cursor-pointer whitespace-nowrap text-blue-400 hover:text-blue-300">
+                            Restore products
+                          </summary>
+                          <form
+                            action={`/api/admin/alerts/${alert.id}/restore`}
+                            method="POST"
+                            className="mt-2 w-56 space-y-2"
+                          >
+                            <p className="text-gray-400">
+                              Puts the flagged cap and bottle back to sealed or opened, and resolves the alert.
+                            </p>
+                            <label htmlFor={`reason-${alert.id}`} className="sr-only">
+                              Reason
+                            </label>
+                            <textarea
+                              id={`reason-${alert.id}`}
+                              name="reason"
+                              required
+                              minLength={REASON_MIN}
+                              maxLength={REASON_MAX}
+                              rows={2}
+                              placeholder="Reason, for the audit log"
+                              className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-200 placeholder:text-gray-500"
+                            />
+                            <button
+                              type="submit"
+                              className="px-2 py-1 text-xs bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-colors"
+                            >
+                              Restore
+                            </button>
+                          </form>
+                        </details>
                       )}
                       {alert.resolved && (
                         <div className="text-xs text-gray-400">

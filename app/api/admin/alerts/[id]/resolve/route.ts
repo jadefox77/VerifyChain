@@ -41,7 +41,12 @@ export async function POST(
   if (referer) {
     try {
       const url = new URL(referer)
-      if (url.pathname.startsWith("/admin/")) target = url.pathname + url.search
+      if (url.pathname.startsWith("/admin/")) {
+        // Drop the outcome of an earlier restore, so its banner is not shown again
+        url.searchParams.delete("restored")
+        url.searchParams.delete("restore_error")
+        target = url.pathname + url.search
+      }
     } catch {
       // Malformed Referer, use the default
     }

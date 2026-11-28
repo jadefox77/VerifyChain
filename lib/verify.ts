@@ -143,8 +143,34 @@ export async function verifyBottle(
 
   // Paired mode
 
-  // Cap already opened before the bottle was scanned: possible refill
-  if (bottle.cap && bottle.cap.status === "OPENED") {
+  // Cap flagged
+  if (bottle.cap && bottle.cap.status === "FLAGGED") {
+    return {
+      status: "FLAGGED",
+      message:
+        "The cap on this bottle has been flagged as suspicious. Do not consume it.",
+    }
+  }
+
+  // Already fully verified. This must come before the refill check below:
+  // after a normal check the bottle and the cap are both OPENED, so a shopper
+  // re-scanning the label of a genuine bottle lands here and is told it was
+  // already checked, without anything being flagged. A refilled bottle whose
+  // label is scanned later gets this same warning.
+  if (bottle.status === "OPENED") {
+    return {
+      status: "ALREADY_VERIFIED",
+      message:
+        "This bottle has already been opened and checked. If you bought it sealed, it may not be genuine.",
+      firstScan: firstVerifiedAt,
+      authMode: "PAIRED",
+    }
+  }
+
+  // Cap opened while the bottle was never checked: possible refill. A normal
+  // cap check (even a cap scanned on its own) also moves the bottle out of
+  // MINT, so this is only reached by data the normal flow does not produce.
+  if (bottle.cap && bottle.cap.status === "OPENED" && bottle.status === "MINT") {
     await prisma.bottle.update({
       where: { id: bottle.id },
       data: { status: "FLAGGED" },
@@ -179,26 +205,6 @@ export async function verifyBottle(
       message:
         "The code inside this bottle's cap has already been scanned, so it has been opened before. It may have been refilled. Do not consume it.",
       capOpenedAt: bottle.cap.openedAt ?? new Date(),
-      authMode: "PAIRED",
-    }
-  }
-
-  // Cap flagged
-  if (bottle.cap && bottle.cap.status === "FLAGGED") {
-    return {
-      status: "FLAGGED",
-      message:
-        "The cap on this bottle has been flagged as suspicious. Do not consume it.",
-    }
-  }
-
-  // Already fully verified
-  if (bottle.status === "OPENED") {
-    return {
-      status: "ALREADY_VERIFIED",
-      message:
-        "This bottle has already been opened and checked. If you bought it sealed, it may not be genuine.",
-      firstScan: firstVerifiedAt,
       authMode: "PAIRED",
     }
   }

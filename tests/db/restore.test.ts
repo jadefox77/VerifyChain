@@ -56,6 +56,24 @@ describe.skipIf(!TEST_DB)("restoring flagged products (database)", () => {
     expect(right.result.status).toBe("GENUINE")
   })
 
+  it("leaves an opened cap and the bottle alone when restoring a mismatch alert", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "WRONG2", withCap: "CAPWRONG2XXXXXXX" })
+    const { bottle } = await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "MINE2", withCap: "CAPMINE2XXXXXXXX" })
+    await verifyCapDetailed({ hiddenSerialId: "CAPMINE2XXXXXXXX", bottleSerialIds: ["WRONG2"] })
+    const alert = await prisma.alertLog.findFirstOrThrow({ where: { type: "INVALID_PAIRING" } })
+
+    // Later flagged for another reason: opened, then reused.
+    await prisma.cap.update({ where: { hiddenSerialId: "CAPMINE2XXXXXXXX" }, data: { status: "FLAGGED", openedAt: new Date() } })
+    await prisma.bottle.update({ where: { id: bottle.id }, data: { status: "FLAGGED" } })
+
+    const staff = await makeStaff()
+    const result = await restoreFromAlert(alert.id, staff.id, "Checking restore scope")
+    expect(result).toEqual({ ok: true, restored: 0 })
+    expect((await prisma.cap.findUniqueOrThrow({ where: { hiddenSerialId: "CAPMINE2XXXXXXXX" } })).status).toBe("FLAGGED")
+    expect((await prisma.bottle.findUniqueOrThrow({ where: { id: bottle.id } })).status).toBe("FLAGGED")
+  })
+
   it("puts products flagged by repeated drift back to opened, and only those", async () => {
     const { manufacturer } = await makeManufacturer()
     const first = await makeBottle(manufacturer.id, {

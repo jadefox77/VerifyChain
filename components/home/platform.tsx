@@ -158,7 +158,7 @@ export function FraudChecks() {
               <div>
                 <p className="text-sm font-semibold text-red-900 dark:text-red-100">At the moment of the scan</p>
                 <p className="mt-1 text-sm leading-relaxed text-red-900/80 dark:text-red-100/80">
-                  A cap opened before, a cap from a different bottle, or a cap scanned before its bottle.
+                  A cap that was opened before, or a cap scanned with a different bottle's label.
                 </p>
               </div>
             </li>

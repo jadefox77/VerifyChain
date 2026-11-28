@@ -183,6 +183,31 @@ describe.skipIf(!TEST_DB)("verification and fraud rules (database)", () => {
     expect(after.result.status).toBe("GENUINE")
   })
 
+  it("lets a shopper re-scan the label of a genuine bottle without flagging it", async () => {
+    const { manufacturer } = await makeManufacturer()
+    const { bottle } = await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "RESCAN1", withCap: "CAPRESCAN1XXXXXX" })
+
+    expect((await verifyBottle({ serialId: "RESCAN1", meta: { deviceHash: "phone-a" } })).status).toBe("PROMPT_CAP")
+    const cap = await verifyCapDetailed({ hiddenSerialId: "CAPRESCAN1XXXXXX", bottleSerialIds: ["RESCAN1"], meta: { deviceHash: "phone-a" } })
+    expect(cap.result.status).toBe("GENUINE")
+
+    // Shown to a friend later
+    const again = await verifyBottle({ serialId: "RESCAN1", meta: { deviceHash: "phone-a" } })
+    expect(again.status).toBe("ALREADY_VERIFIED")
+    expect((await prisma.bottle.findUniqueOrThrow({ where: { id: bottle.id } })).status).toBe("OPENED")
+    expect((await prisma.cap.findUniqueOrThrow({ where: { hiddenSerialId: "CAPRESCAN1XXXXXX" } })).status).toBe("OPENED")
+    expect(await prisma.scanLog.count({ where: { bottleId: bottle.id, fraudFlag: true } })).toBe(0)
+  })
+
+  it("still warns about a cap opened while its bottle was never checked", async () => {
+    const { manufacturer } = await makeManufacturer()
+    const { bottle } = await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "ODD1", withCap: "CAPODD1XXXXXXXXX" })
+    await prisma.cap.update({ where: { hiddenSerialId: "CAPODD1XXXXXXXXX" }, data: { status: "OPENED", openedAt: new Date() } })
+
+    expect((await verifyBottle({ serialId: "ODD1" })).status).toBe("CAP_ALREADY_OPENED")
+    expect((await prisma.bottle.findUniqueOrThrow({ where: { id: bottle.id } })).status).toBe("FLAGGED")
+  })
+
   it("reports the first scan time for a reused single-mode code, not the last status change", async () => {
     const { manufacturer } = await makeManufacturer()
     const { bottle } = await makeBottle(manufacturer.id, { authMode: "SINGLE", serialId: "SINGLE1" })

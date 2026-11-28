@@ -2,10 +2,13 @@ import type { CapStatus, BottleStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
 // Staff "Restore" for products flagged by the cap mismatch or the repeated
-// drift rule. Nothing stores the status a product had before it was flagged,
-// so it is worked out from what did happen to it:
-//   cap:    SEALED if it was never opened, otherwise OPENED
-//   bottle: OPENED if its cap was opened, otherwise MINT
+// drift rule. Only what that rule flagged is undone:
+//   mismatch alert: the cap, only if it is FLAGGED and was never opened,
+//                   back to SEALED. The bottle is never touched.
+//   drift alert:    the cap and bottle the repeated-drift rule flagged. Their
+//                   earlier status is worked out from what happened to them:
+//                   cap OPENED if it was opened (else SEALED), bottle OPENED
+//                   if its cap was opened (else MINT).
 // Restoring also resolves the alert (so a cap scanned alone is no longer
 // refused, and the batch's drift count starts again) and writes one audit
 // log entry with who did it, why, and each product's status before and after.
@@ -81,8 +84,15 @@ export async function restoreFromAlert(alertId: string, staffUserId: string, raw
   for (const cap of caps) {
     if (!cap.bottle) continue
     const change: Change = { capId: cap.id, bottleSerialId: cap.bottle.serialId }
-    if (cap.status === "FLAGGED") change.cap = { from: "FLAGGED", to: cap.openedAt ? "OPENED" : "SEALED" }
-    if (cap.bottle.status === "FLAGGED") change.bottle = { from: "FLAGGED", to: cap.openedAt ? "OPENED" : "MINT" }
+    if (alert.type === "INVALID_PAIRING") {
+      // A mismatch only ever flags a cap that was never opened, and never the
+      // bottle. Anything else flagged here (an opened cap, the bottle) has
+      // another cause, such as a reused cap, so it is left alone.
+      if (cap.status === "FLAGGED" && !cap.openedAt) change.cap = { from: "FLAGGED", to: "SEALED" }
+    } else {
+      if (cap.status === "FLAGGED") change.cap = { from: "FLAGGED", to: cap.openedAt ? "OPENED" : "SEALED" }
+      if (cap.bottle.status === "FLAGGED") change.bottle = { from: "FLAGGED", to: cap.openedAt ? "OPENED" : "MINT" }
+    }
     if (change.cap || change.bottle) changes.push(change)
   }
   if (changes.length === 0 && alert.resolved) return { ok: false, error: "nothing_to_restore" }
@@ -92,7 +102,11 @@ export async function restoreFromAlert(alertId: string, staffUserId: string, raw
     for (const c of changes) {
       // Only rows still FLAGGED are changed, in case a scan moved them since
       if (c.cap && c.capId) {
-        await tx.cap.updateMany({ where: { id: c.capId, status: "FLAGGED" }, data: { status: c.cap.to } })
+        // A cap going back to SEALED must still never have been opened
+        await tx.cap.updateMany({
+          where: { id: c.capId, status: "FLAGGED", ...(c.cap.to === "SEALED" ? { openedAt: null } : {}) },
+          data: { status: c.cap.to },
+        })
       }
       if (c.bottle) {
         await tx.bottle.updateMany({ where: { serialId: c.bottleSerialId, status: "FLAGGED" }, data: { status: c.bottle.to } })

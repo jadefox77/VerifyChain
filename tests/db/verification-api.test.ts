@@ -146,5 +146,28 @@ describe.skipIf(!TEST_DB)("verification API (database)", () => {
     ).json()
     expect(swapped.status).toBe("suspicious")
     expect(swapped.check.reason).toBe("cap_bottle_mismatch")
+    expect(swapped.next_step).toEqual({ action: "scan_bottle" })
+    // The swapped cap is still sealed, so its own label still works
+    const own = await (
+      await handleVerify(
+        call("/api/v1/verify/cap", key, { code: buildCapVerifyUrl("CAPAPICAP2XXXXXX", "APICAP2"), bottle_code: "APICAP2" }),
+        "cap"
+      )
+    ).json()
+    expect(own.status).toBe("authentic")
+  })
+
+  it("answers authentic_unpaired, not authentic, when no bottle_code is sent", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "APINOB1", withCap: "CAPAPINOB1XXXXXX" })
+    const { key } = await makeKey(manufacturer.id, "SECRET")
+
+    const res = await (
+      await handleVerify(call("/api/v1/verify/cap", key, { code: buildCapVerifyUrl("CAPAPINOB1XXXXXX", "APINOB1") }), "cap")
+    ).json()
+    expect(res.status).toBe("authentic_unpaired")
+    expect(res.check.pairing_checked).toBe(false)
+    expect(res.check.reason).toBe("bottle_not_checked")
+    expect(res.brand.legal_name).toBe(manufacturer.companyName)
   })
 })

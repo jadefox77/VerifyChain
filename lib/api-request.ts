@@ -250,7 +250,11 @@ export async function handleVerify(req: NextRequest, layer: Layer) {
       {
         object: "verification",
         ...result,
-        brand: { name: key.manufacturer.brandProfile?.displayName || key.manufacturer.companyName },
+        brand: {
+          name: key.manufacturer.brandProfile?.displayName || key.manufacturer.companyName,
+          // The company name VerifyChain approved, which the brand cannot change
+          legal_name: key.manufacturer.companyName,
+        },
         request_id: requestId,
       },
       200,

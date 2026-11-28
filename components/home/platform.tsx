@@ -147,7 +147,7 @@ export function FraudChecks() {
     <section id="fraud" aria-labelledby="fraud-heading" className="scroll-mt-20">
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-24">
         <SectionHeading id="fraud-heading" eyebrow="Fraud detection" title="Fraud checks that run every night">
-          Reused caps and mismatched caps are flagged the moment they are scanned. Then, once a day, VerifyChain looks
+          Reused caps are flagged the moment they are scanned, and a cap scanned with the wrong label is reported to you straight away. Then, once a day, VerifyChain looks
           across all your scans for patterns no single check can see, and raises an alert for each one it finds.
         </SectionHeading>
 

@@ -110,12 +110,32 @@ describe("public statuses", () => {
   })
 
   it("maps cap results without leaking internal reasons", () => {
-    expect(capToApi({ status: "GENUINE", message: "m", productName: "P", openedAt: at, pairingChecked: true }).check.pairing_checked).toBe(true)
+    const paired = capToApi({ status: "GENUINE", message: "m", productName: "P", openedAt: at, pairingChecked: true, outsideRegion: false })
+    expect(paired.status).toBe("authentic")
+    expect(paired.check.pairing_checked).toBe(true)
+    expect(paired.check.outside_target_region).toBe(false)
     expect(capToApi({ status: "WARNING", message: "m", firstOpened: at, firstLocation: null }).status).toBe("already_verified")
-    expect(capToApi({ status: "MISMATCH", message: "m" }).check.reason).toBe("cap_bottle_mismatch")
+    const mismatch = capToApi({ status: "MISMATCH", message: "m", retry: true })
+    expect(mismatch.check.reason).toBe("cap_bottle_mismatch")
+    expect(mismatch.next_step).toEqual({ action: "scan_bottle" })
+    expect(capToApi({ status: "MISMATCH", message: "m", retry: false }).next_step).toBeNull()
     const drift = capToApi({ status: "FLAGGED", message: "m", reason: "Supply chain drift: batch intended for Lagos but scanned 900km away" })
     expect(drift.check.reason).toBe("outside_supply_region")
     expect(JSON.stringify(drift)).not.toContain("900km")
+  })
+
+  it("never calls a cap authentic when the bottle was not checked", () => {
+    const r = capToApi({ status: "GENUINE", message: "m", productName: "P", openedAt: at, pairingChecked: false, outsideRegion: false })
+    expect(r.status).toBe("authentic_unpaired")
+    expect(r.check.pairing_checked).toBe(false)
+    expect(r.check.reason).toBe("bottle_not_checked")
+    expect(usageBucket("authentic_unpaired")).toBe("authentic")
+  })
+
+  it("passes a product opened out of region, and says so", () => {
+    const r = capToApi({ status: "GENUINE", message: "m", productName: "P", openedAt: at, pairingChecked: true, outsideRegion: true })
+    expect(r.status).toBe("authentic")
+    expect(r.check.outside_target_region).toBe(true)
   })
 
   it("buckets statuses for usage counts", () => {

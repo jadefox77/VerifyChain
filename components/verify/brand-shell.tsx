@@ -174,6 +174,13 @@ export function BrandShell({
             <p className="mt-0.5 text-xs text-[var(--brand-on-bg)] opacity-75 dark:text-gray-300">{brand.tagline}</p>
           )}
         </div>
+        {/* Fixed colours, like the result, so a brand cannot hide or restyle it */}
+        <p className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          <VerifyChainMark className="h-3.5 w-3.5" />
+          <span>
+            Company approved by VerifyChain: <span className="font-semibold text-gray-900 dark:text-white">{brand.legalName}</span>
+          </span>
+        </p>
       </header>
       <Main id={fullHeight ? "main" : undefined} className="flex flex-1 flex-col items-center px-4 py-6 sm:justify-center">
         <div className="w-full max-w-sm">{children}</div>

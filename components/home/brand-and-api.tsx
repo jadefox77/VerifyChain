@@ -10,6 +10,7 @@ import { SectionHeading } from "./chrome"
 // BrandShell and ResultCard the real scan pages use.
 const EXAMPLE_BRAND: BrandView = {
   name: "Your Brand",
+  legalName: "Your Company Ltd",
   tagline: "Example brand page",
   logoUrl: null,
   primaryColor: "#1d4ed8",

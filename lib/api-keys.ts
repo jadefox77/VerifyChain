@@ -114,7 +114,17 @@ export function readBottleId(code: string | undefined): string | undefined {
 
 // ── Public response ────────────────────────────────────────────────────────
 
-export type ApiStatus = "authentic" | "scan_cap" | "already_verified" | "suspicious" | "not_found" | "invalid"
+// authentic_unpaired: the cap is genuine and this is its first opening, but
+// no bottle_code was sent, so the refill check (does this cap belong to the
+// bottle in the shopper's hand?) was not done.
+export type ApiStatus =
+  | "authentic"
+  | "authentic_unpaired"
+  | "scan_cap"
+  | "already_verified"
+  | "suspicious"
+  | "not_found"
+  | "invalid"
 
 export type ApiVerification = {
   status: ApiStatus
@@ -127,8 +137,14 @@ export type ApiVerification = {
     pairing_checked: boolean | null
     first_checked_at: string | null
     reason: string | null
+    // Opened more than 300 km from the batch's target state. Reported to the
+    // brand; on its own it does not fail the check.
+    outside_target_region: boolean
   }
-  next_step: { action: "scan_cap"; top_code: string | null } | null
+  next_step:
+    | { action: "scan_cap"; top_code: string | null }
+    | { action: "scan_bottle" }
+    | null
 }
 
 export const INVALID_MESSAGE =
@@ -143,6 +159,7 @@ const base = (layer: "bottle" | "cap"): ApiVerification["check"] => ({
   pairing_checked: null,
   first_checked_at: null,
   reason: null,
+  outside_target_region: false,
 })
 
 export function invalidResponse(layer: "bottle" | "cap"): ApiVerification {
@@ -204,10 +221,19 @@ export function capToApi(r: CapVerifyResult): ApiVerification {
   switch (r.status) {
     case "GENUINE":
       return {
-        status: "authentic",
-        message: r.message,
+        status: r.pairingChecked ? "authentic" : "authentic_unpaired",
+        message: r.pairingChecked
+          ? r.message
+          : `${r.message} The cap was not checked against the bottle label, so a refill cannot be ruled out.`,
         product: { name: r.productName },
-        check: { ...check, first_check: true, pairing_checked: r.pairingChecked, first_checked_at: iso(r.openedAt) },
+        check: {
+          ...check,
+          first_check: true,
+          pairing_checked: r.pairingChecked,
+          first_checked_at: iso(r.openedAt),
+          reason: r.pairingChecked ? null : "bottle_not_checked",
+          outside_target_region: r.outsideRegion,
+        },
         next_step: null,
       }
     case "WARNING":
@@ -224,7 +250,9 @@ export function capToApi(r: CapVerifyResult): ApiVerification {
         message: r.message,
         product: null,
         check: { ...check, pairing_checked: true, reason: "cap_bottle_mismatch" },
-        next_step: null,
+        // The cap is still sealed. First time: ask for the label of the bottle
+        // that was actually opened, then send the cap again with it.
+        next_step: r.retry ? { action: "scan_bottle" } : null,
       }
     case "FLAGGED":
       return {
@@ -242,7 +270,7 @@ export function capToApi(r: CapVerifyResult): ApiVerification {
 export type UsageBucket = "authentic" | "warnings" | "notFound" | "rejected"
 
 export function usageBucket(status: ApiStatus): UsageBucket {
-  if (status === "authentic") return "authentic"
+  if (status === "authentic" || status === "authentic_unpaired") return "authentic"
   if (status === "not_found" || status === "invalid") return "notFound"
   return "warnings"
 }

@@ -75,3 +75,11 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 
 // Distance from a scan to its batch's target region.
 export const DRIFT_RADIUS_KM = 300
+
+// One out-of-region open is recorded and reported but still passes, because
+// stock moves between states and phone location is approximate. A product is
+// only hard-flagged once this many other bottles of the same batch have been
+// opened outside the area within DRIFT_WINDOW_DAYS. Resolving the batch's
+// drift alert restarts the count.
+export const DRIFT_HARD_FLAG_BOTTLES = 10
+export const DRIFT_WINDOW_DAYS = 30

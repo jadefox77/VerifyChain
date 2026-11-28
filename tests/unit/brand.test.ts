@@ -96,6 +96,30 @@ describe("sniffImageType", () => {
 })
 
 describe("toBrandView", () => {
+  it("always keeps the approved company name, whatever the display name", () => {
+    const view = toBrandView(
+      {
+        displayName: "Totally Official Drinks",
+        tagline: null,
+        logoImageId: null,
+        ...base,
+        fontStyle: "sans",
+        supportEmail: null,
+        supportPhone: null,
+        websiteUrl: null,
+        supportUrl: null,
+        instagramUrl: null,
+        facebookUrl: null,
+        xUrl: null,
+        tiktokUrl: null,
+      },
+      "Zobo Ltd"
+    )
+    expect(view.name).toBe("Totally Official Drinks")
+    expect(view.legalName).toBe("Zobo Ltd")
+  })
+
+
   const profile = {
     displayName: null,
     tagline: null,
@@ -115,6 +139,7 @@ describe("toBrandView", () => {
   it("uses the company name, the logo route and only safe links", () => {
     const view = toBrandView(profile, "Zobo Ltd")
     expect(view.name).toBe("Zobo Ltd")
+    expect(view.legalName).toBe("Zobo Ltd")
     expect(view.logoUrl).toBe("/api/brand-image/abc")
     expect(view.fontStyle).toBe("sans")
     expect(view.links.map((l) => l.key)).toEqual(["websiteUrl"])

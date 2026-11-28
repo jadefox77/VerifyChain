@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { Logo } from "@/components/ui/logo"
+import { DRIFT_HARD_FLAG_BOTTLES, DRIFT_RADIUS_KM, DRIFT_WINDOW_DAYS } from "@/lib/regions"
 
 export const metadata: Metadata = {
   title: "Verification API",
@@ -140,7 +141,7 @@ export default function DevelopersDocsPage() {
             rows={[
               [<C key="a">code</C>, "Yes", "The scanned link, or the code id."],
               [<C key="b">sig</C>, "Only with a bare id", "The code's signature (the sig value in the link)."],
-              [<C key="c">bottle_code</C>, "Cap only, recommended", "The bottle label the shopper scanned first. Lets us confirm the cap belongs to that bottle."],
+              [<C key="c">bottle_code</C>, "Cap only, strongly recommended", "The bottle label the shopper scanned first. Lets us confirm the cap belongs to that bottle. Without it the result is authentic_unpaired, never authentic."],
               [<C key="d">lat</C>, "No", "Latitude, if the shopper agreed to share location. Helps spot products far from their market."],
               [<C key="e">lng</C>, "No", "Longitude."],
               [<C key="f">shopper_ip</C>, "No, secret keys only", "The shopper's IP address, if your server knows it. Stored only as a keyed hash."],
@@ -165,10 +166,11 @@ export default function DevelopersDocsPage() {
     "first_check": true,
     "pairing_checked": true,
     "first_checked_at": "2026-11-28T09:14:02.000Z",
-    "reason": null
+    "reason": null,
+    "outside_target_region": false
   },
   "next_step": null,
-  "brand": { "name": "Your Brand" },
+  "brand": { "name": "Your Brand", "legal_name": "Your Company Ltd" },
   "request_id": "req_Xk3..."
 }`}</Code>
           <P>
@@ -178,10 +180,11 @@ export default function DevelopersDocsPage() {
           <Table
             head={["status", "Meaning"]}
             rows={[
-              [<C key="1">authentic</C>, "Genuine, and this is the first check of this code (for two-code products, the first opening of this cap)."],
+              [<C key="1">authentic</C>, "Genuine, and this is the first check of this code (for two-code products, the first opening of this cap, and the cap belongs to the bottle_code you sent)."],
+              [<C key="1b">authentic_unpaired</C>, "Cap endpoint only, when no bottle_code was sent. The cap is genuine and this is its first opening, but it was not checked against the bottle label, so a refill cannot be ruled out. check.reason is bottle_not_checked. Treat it as a pass with a caveat, and send bottle_code to get authentic."],
               [<C key="2">scan_cap</C>, "The bottle label is genuine and the bottle has not been opened. Not a final answer: the cap still needs to be scanned. next_step.top_code is the code printed on top of the cap."],
               [<C key="3">already_verified</C>, "This code was checked before, at check.first_checked_at. If the shopper has just opened the product, it may not be genuine. A repeat check alone does not prove a fake."],
-              [<C key="4">suspicious</C>, "Do not use the product. check.reason says why: flagged, cap_opened_before_label, cap_bottle_mismatch, cap_not_paired or outside_supply_region."],
+              [<C key="4">suspicious</C>, "Do not use the product. check.reason says why: flagged, cap_opened_before_label, cap_bottle_mismatch, cap_not_paired or outside_supply_region. For cap_bottle_mismatch the cap is left sealed: if next_step.action is scan_bottle, ask the shopper to scan the label of the bottle they actually opened, then call the cap endpoint again with that label as bottle_code."],
               [<C key="5">not_found</C>, "No product of yours has this code."],
               [<C key="6">invalid</C>, "The code or its signature is malformed or altered."],
             ]}
@@ -190,6 +193,12 @@ export default function DevelopersDocsPage() {
             A one-code product can only prove that a code was issued and not checked before. If a code is copied, whoever
             checks the copy first gets <C>authentic</C>, and later checks of that code are caught. Two-code products also
             catch refills.
+          </P>
+          <P>
+            <C>check.outside_target_region</C> is true when the product was opened more than {DRIFT_RADIUS_KM} km from the
+            state its batch was made for. The product still passes, because stock moves between states and phone location
+            is approximate, and the brand gets an alert. A product is only flagged once {DRIFT_HARD_FLAG_BOTTLES} other
+            bottles of the same batch have been opened outside the area within {DRIFT_WINDOW_DAYS} days, and then the status is <C>suspicious</C> with reason <C>outside_supply_region</C>.
           </P>
         </Section>
 
@@ -227,7 +236,7 @@ const res = await fetch("${base}/api/v1/verify", {
   body: JSON.stringify({ code: scannedText, shopper_ip: req.ip }),
 })
 const result = await res.json()
-if (result.status === "authentic") { /* show your genuine screen */ }`}</Code>
+if (result.status === "authentic" || result.status === "authentic_unpaired") { /* show your genuine screen */ }`}</Code>
           <P>In your website&apos;s page, with a publishable key:</P>
           <Code>{`const res = await fetch("${base}/api/v1/verify/cap", {
   method: "POST",

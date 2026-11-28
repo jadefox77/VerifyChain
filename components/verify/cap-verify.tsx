@@ -96,9 +96,16 @@ export function CapVerify({
               },
             ]}
             note={
-              result.pairingChecked
-                ? undefined
-                : 'Next time, scan the bottle label first. That lets us also confirm the cap belongs to the bottle.'
+              [
+                result.pairingChecked
+                  ? null
+                  : 'Next time, scan the bottle label first. That lets us also confirm the cap belongs to the bottle.',
+                result.outsideRegion
+                  ? 'This product was checked outside the area it was supplied to. Stock does move between states, so this does not mean it is fake. We have let the brand know.'
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' ') || undefined
             }
           />
           {product && <ProductCard product={product} />}
@@ -124,6 +131,20 @@ export function CapVerify({
       )
 
     case 'MISMATCH':
+      if (result.retry) {
+        return (
+          <ResultCard
+            tone="warn"
+            title="Scan the bottle you opened"
+            message={result.message}
+          >
+            <ScanLine
+              className="mx-auto mt-4 h-6 w-6 text-gray-400"
+              aria-hidden="true"
+            />
+          </ResultCard>
+        )
+      }
       return (
         <>
           <ResultCard

@@ -361,8 +361,11 @@ async function changeRole(formData: FormData) {
 
 // Removing someone takes effect on their next request, because the
 // dashboard reads team membership from the database. Their password is
-// cleared so the account cannot sign in again; it is kept, not deleted, so
-// the audit trail still points at a real user.
+// cleared and their Google (or other OAuth) link is removed, so the account
+// cannot sign in again either way. Signing in with Google afterwards is
+// refused, because the email belongs to an existing user and accounts are
+// not linked by email. The user row is kept, not deleted, so the audit trail
+// still points at a real user.
 async function removeMember(formData: FormData) {
   "use server"
   const { manufacturer, userId } = await requireWorkspace("manageTeam")
@@ -373,6 +376,8 @@ async function removeMember(formData: FormData) {
       where: { id: member.id },
       data: { teamManufacturerId: null, password: null, mustResetPassword: false },
     }),
+    prisma.account.deleteMany({ where: { userId: member.id } }),
+    prisma.session.deleteMany({ where: { userId: member.id } }),
     prisma.auditLog.create({
       data: {
         userId,
@@ -380,6 +385,7 @@ async function removeMember(formData: FormData) {
         targetType: "User",
         targetId: member.id,
         before: JSON.stringify({ role: member.role, manufacturerId: manufacturer.id }),
+        after: JSON.stringify({ oauthUnlinked: true }),
       },
     }),
   ])

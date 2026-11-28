@@ -30,6 +30,9 @@ export type LinkKey = (typeof LINK_FIELDS)[number]["key"]
 // What the scan pages and the preview need. No ids, no internal fields.
 export type BrandView = {
   name: string
+  // The company name VerifyChain approved at onboarding. The brand can change
+  // its display name and logo, but not this, so it is always shown with them.
+  legalName: string
   tagline: string | null
   logoUrl: string | null
   primaryColor: string
@@ -213,6 +216,7 @@ type ProfileLike = {
 export function toBrandView(profile: ProfileLike, companyName: string, logoUrl?: string | null): BrandView {
   return {
     name: profile.displayName || companyName,
+    legalName: companyName,
     tagline: profile.tagline,
     logoUrl: logoUrl !== undefined ? logoUrl : brandImageUrl(profile.logoImageId),
     primaryColor: normalizeHex(profile.primaryColor) ?? DEFAULT_BRAND.primaryColor,

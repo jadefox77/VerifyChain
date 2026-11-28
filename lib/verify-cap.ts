@@ -46,6 +46,10 @@ export type CapVerifyResult =
       outsideRegion: boolean
     }
   | { status: "WARNING"; message: string; firstOpened: Date; firstLocation: string | null }
+  // The same shopper (same device, or same IP or API key when there is no
+  // device) checking a cap they opened within SAME_SHOPPER_RECHECK_MS.
+  // Nothing is flagged.
+  | { status: "ALREADY_CHECKED"; message: string; productName: string; firstOpened: Date }
   | { status: "FLAGGED"; message: string; reason: string }
   // retry true: the cap is left sealed and the shopper is asked to scan the
   // label of the bottle they actually opened. retry false: the same source
@@ -61,6 +65,10 @@ export type CapVerifyResult =
 // A second mismatch on the same cap from the same phone (or IP, or API key)
 // within this window means the retry did not help.
 export const MISMATCH_REPEAT_WINDOW_MS = 30 * 60 * 1000
+
+// A re-scan of an opened cap by whoever opened it, within this time, is a
+// double tap, a reload or showing someone, not a reused cap.
+export const SAME_SHOPPER_RECHECK_MS = 24 * 60 * 60 * 1000
 
 const MISMATCH_REASON = "Cap and bottle identity mismatch"
 // The two log reasons that count as a real mismatch for the repeat rule. Scans
@@ -239,7 +247,20 @@ async function checkCap(
   const firstOpen = claim.count === 1
 
   if (!firstOpen) {
-    // Already opened before (or by a concurrent scan a moment ago)
+    // Already opened before (or by a concurrent scan a moment ago). If the
+    // person who opened it is checking again, say so calmly and flag nothing.
+    const opened = await prisma.cap.findUnique({ where: { id: cap.id }, select: { status: true, openedAt: true } })
+    if (opened?.status === "OPENED" && opened.openedAt && (await openedBySameSource(cap.id, opened.openedAt, meta))) {
+      await logScan(false, "Cap re-checked by the shopper who opened it")
+      return {
+        status: "ALREADY_CHECKED",
+        message: "You already checked this product, and it was genuine when its cap was first opened.",
+        productName: bottle.batch.product?.name ?? "Unknown Product",
+        firstOpened: opened.openedAt,
+      }
+    }
+
+    // Anyone else, or much later: the pattern a reused cap leaves behind.
     const reason = "Cap already opened"
     await logScan(true, driftReason ? `${reason}; ${driftReason}` : reason)
     await prisma.cap.updateMany({
@@ -310,6 +331,30 @@ async function hasOpenMismatchAlert(capId: string, batchId: string): Promise<boo
     select: { id: true },
   })
   return open !== null
+}
+
+// Did the scan that opened this cap come from the same source as this one,
+// within SAME_SHOPPER_RECHECK_MS of the opening? The source is the device when
+// this scan has one, otherwise the hashed IP, otherwise the API key. The
+// opening scan is the first cap scan logged at or after openedAt that was not
+// a refused mismatch.
+async function openedBySameSource(capId: string, openedAt: Date, meta?: ScanMeta): Promise<boolean> {
+  if (Date.now() - openedAt.getTime() > SAME_SHOPPER_RECHECK_MS) return false
+  const opener = await prisma.scanLog.findFirst({
+    where: {
+      capId,
+      scanLayer: "CAP",
+      scannedAt: { gte: new Date(openedAt.getTime() - 5_000) },
+      OR: [{ flagReason: null }, { flagReason: { startsWith: DRIFT_PREFIX } }],
+    },
+    orderBy: { scannedAt: "asc" },
+    select: { deviceHash: true, ipHash: true, apiKeyId: true },
+  })
+  if (!opener) return false
+  if (meta?.deviceHash) return opener.deviceHash === meta.deviceHash
+  if (meta?.ipHash) return opener.ipHash === meta.ipHash
+  if (meta?.apiKeyId) return opener.apiKeyId === meta.apiKeyId
+  return false
 }
 
 // Has this same source already had a mismatch on this cap recently?

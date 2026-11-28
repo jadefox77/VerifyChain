@@ -181,6 +181,21 @@ describe.skipIf(!TEST_DB)("verification API (database)", () => {
     expect(after.next_step).toBeNull()
   })
 
+  it("tells the same shopper their re-check is fine, and flags a re-check from someone else", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "APIRE1", withCap: "CAPAPIRE1XXXXXXX" })
+    const { key } = await makeKey(manufacturer.id, "SECRET")
+    const body = (ip: string) => ({ code: buildCapVerifyUrl("CAPAPIRE1XXXXXXX", "APIRE1"), bottle_code: "APIRE1", shopper_ip: ip })
+
+    expect((await (await handleVerify(call("/api/v1/verify/cap", key, body("198.51.100.7")), "cap")).json()).status).toBe("authentic")
+    const same = await (await handleVerify(call("/api/v1/verify/cap", key, body("198.51.100.7")), "cap")).json()
+    expect(same.status).toBe("already_verified")
+    expect(same.check.reason).toBe("same_shopper_recheck")
+    const other = await (await handleVerify(call("/api/v1/verify/cap", key, body("198.51.100.99")), "cap")).json()
+    expect(other.status).toBe("already_verified")
+    expect(other.check.reason).toBe("cap_already_opened")
+  })
+
   it("answers authentic_unpaired, not authentic, when no bottle_code is sent", async () => {
     const { manufacturer } = await makeManufacturer()
     await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "APINOB1", withCap: "CAPAPINOB1XXXXXX" })

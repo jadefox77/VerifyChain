@@ -112,6 +112,22 @@ export function CapVerify({
         </>
       )
 
+    case 'ALREADY_CHECKED':
+      return (
+        <>
+          <ResultCard
+            tone="good"
+            title="You already checked this product"
+            message={result.message}
+            details={[
+              { label: 'Product', value: result.productName },
+              { label: 'First opened', value: fmt(result.firstOpened) },
+            ]}
+          />
+          {product && <ProductCard product={product} />}
+        </>
+      )
+
     case 'WARNING':
       return (
         <>

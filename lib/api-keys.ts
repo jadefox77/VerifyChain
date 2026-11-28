@@ -244,6 +244,16 @@ export function capToApi(r: CapVerifyResult): ApiVerification {
         check: { ...check, first_checked_at: iso(r.firstOpened), reason: "cap_already_opened" },
         next_step: null,
       }
+    case "ALREADY_CHECKED":
+      // The same shopper checking again (same IP, or same key when no shopper
+      // IP is known) within 24 hours of opening. Nothing was flagged.
+      return {
+        status: "already_verified",
+        message: r.message,
+        product: { name: r.productName },
+        check: { ...check, first_checked_at: iso(r.firstOpened), reason: "same_shopper_recheck" },
+        next_step: null,
+      }
     case "NEEDS_BOTTLE":
       // Sent without bottle_code while the cap has an open mismatch alert.
       // Never authentic_unpaired: the cap is still sealed and needs its label.

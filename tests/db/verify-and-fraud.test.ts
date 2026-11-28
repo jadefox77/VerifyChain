@@ -199,6 +199,42 @@ describe.skipIf(!TEST_DB)("verification and fraud rules (database)", () => {
     expect(await prisma.scanLog.count({ where: { bottleId: bottle.id, fraudFlag: true } })).toBe(0)
   })
 
+  it("lets the shopper who opened a cap scan it again without flagging it", async () => {
+    const { manufacturer } = await makeManufacturer()
+    const { bottle } = await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "TWICE1", withCap: "CAPTWICE1XXXXXXX" })
+    const meta = { deviceHash: "phone-twice" }
+
+    const first = await verifyCapDetailed({ hiddenSerialId: "CAPTWICE1XXXXXXX", bottleSerialIds: ["TWICE1"], meta })
+    expect(first.result.status).toBe("GENUINE")
+
+    // Double tap, reload, or showing a friend
+    const again = await verifyCapDetailed({ hiddenSerialId: "CAPTWICE1XXXXXXX", capLinkBottleId: "TWICE1", meta })
+    expect(again.result.status).toBe("ALREADY_CHECKED")
+    const cap = await prisma.cap.findUniqueOrThrow({ where: { hiddenSerialId: "CAPTWICE1XXXXXXX" } })
+    expect(cap.status).toBe("OPENED")
+    expect(await prisma.scanLog.count({ where: { capId: cap.id, fraudFlag: true } })).toBe(0)
+    expect((await verifyBottle({ serialId: "TWICE1", meta })).status).toBe("ALREADY_VERIFIED")
+    expect((await prisma.bottle.findUniqueOrThrow({ where: { id: bottle.id } })).status).toBe("OPENED")
+  })
+
+  it("still flags an opened cap scanned from another phone, or a day later", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "REUSE1", withCap: "CAPREUSE1XXXXXXX" })
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "LATE1", withCap: "CAPLATE1XXXXXXXX" })
+
+    await verifyCapDetailed({ hiddenSerialId: "CAPREUSE1XXXXXXX", bottleSerialIds: ["REUSE1"], meta: { deviceHash: "phone-a" } })
+    const other = await verifyCapDetailed({ hiddenSerialId: "CAPREUSE1XXXXXXX", bottleSerialIds: ["REUSE1"], meta: { deviceHash: "phone-b" } })
+    expect(other.result.status).toBe("WARNING")
+    expect((await prisma.cap.findUniqueOrThrow({ where: { hiddenSerialId: "CAPREUSE1XXXXXXX" } })).status).toBe("FLAGGED")
+
+    await verifyCapDetailed({ hiddenSerialId: "CAPLATE1XXXXXXXX", bottleSerialIds: ["LATE1"], meta: { deviceHash: "phone-c" } })
+    const dayAgo = new Date(Date.now() - 25 * 3600_000)
+    await prisma.cap.update({ where: { hiddenSerialId: "CAPLATE1XXXXXXXX" }, data: { openedAt: dayAgo } })
+    await prisma.scanLog.updateMany({ where: { cap: { hiddenSerialId: "CAPLATE1XXXXXXXX" } }, data: { scannedAt: dayAgo } })
+    const late = await verifyCapDetailed({ hiddenSerialId: "CAPLATE1XXXXXXXX", bottleSerialIds: ["LATE1"], meta: { deviceHash: "phone-c" } })
+    expect(late.result.status).toBe("WARNING")
+  })
+
   it("still warns about a cap opened while its bottle was never checked", async () => {
     const { manufacturer } = await makeManufacturer()
     const { bottle } = await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "ODD1", withCap: "CAPODD1XXXXXXXXX" })

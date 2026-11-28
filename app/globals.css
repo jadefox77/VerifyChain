@@ -73,3 +73,36 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/*
+  Homepage motion. The hero rises in on load and later sections fade up as
+  they scroll into view, where the browser supports scroll-driven animation.
+  Both are skipped for people who ask for reduced motion.
+*/
+@keyframes vc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .vc-rise {
+    animation: vc-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .vc-rise-late {
+    animation: vc-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+  }
+
+  @supports (animation-timeline: view()) {
+    .vc-reveal {
+      animation: vc-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
+}

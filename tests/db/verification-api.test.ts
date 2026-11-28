@@ -157,6 +157,30 @@ describe.skipIf(!TEST_DB)("verification API (database)", () => {
     expect(own.status).toBe("authentic")
   })
 
+  it("never answers authentic_unpaired for a cap with an open mismatch", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "APIMM1", withCap: "CAPAPIMM1XXXXXXX" })
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "APIMM2", withCap: "CAPAPIMM2XXXXXXX" })
+    const { key } = await makeKey(manufacturer.id, "SECRET")
+    const capCode = buildCapVerifyUrl("CAPAPIMM2XXXXXXX", "APIMM2")
+
+    const swapped = await (await handleVerify(call("/api/v1/verify/cap", key, { code: capCode, bottle_code: "APIMM1" }), "cap")).json()
+    expect(swapped.check.reason).toBe("cap_bottle_mismatch")
+
+    // The app resends the cap without bottle_code
+    const resent = await (await handleVerify(call("/api/v1/verify/cap", key, { code: capCode }), "cap")).json()
+    expect(resent.status).toBe("suspicious")
+    expect(resent.check.reason).toBe("cap_bottle_mismatch")
+    expect(resent.next_step).toEqual({ action: "scan_bottle" })
+
+    // A second mismatch from the same key flags the cap for good
+    await handleVerify(call("/api/v1/verify/cap", key, { code: capCode, bottle_code: "APIMM1" }), "cap")
+    const after = await (await handleVerify(call("/api/v1/verify/cap", key, { code: capCode, bottle_code: "APIMM2" }), "cap")).json()
+    expect(after.status).toBe("suspicious")
+    expect(after.check.reason).toBe("cap_bottle_mismatch")
+    expect(after.next_step).toBeNull()
+  })
+
   it("answers authentic_unpaired, not authentic, when no bottle_code is sent", async () => {
     const { manufacturer } = await makeManufacturer()
     await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "APINOB1", withCap: "CAPAPINOB1XXXXXX" })

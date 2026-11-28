@@ -244,6 +244,16 @@ export function capToApi(r: CapVerifyResult): ApiVerification {
         check: { ...check, first_checked_at: iso(r.firstOpened), reason: "cap_already_opened" },
         next_step: null,
       }
+    case "NEEDS_BOTTLE":
+      // Sent without bottle_code while the cap has an open mismatch alert.
+      // Never authentic_unpaired: the cap is still sealed and needs its label.
+      return {
+        status: "suspicious",
+        message: r.message,
+        product: null,
+        check: { ...check, pairing_checked: false, reason: "cap_bottle_mismatch" },
+        next_step: { action: "scan_bottle" },
+      }
     case "MISMATCH":
       return {
         status: "suspicious",
@@ -259,7 +269,15 @@ export function capToApi(r: CapVerifyResult): ApiVerification {
         status: "suspicious",
         message: r.message,
         product: null,
-        check: { ...check, reason: r.reason === "UNPAIRED_CAP" ? "cap_not_paired" : "outside_supply_region" },
+        check: {
+          ...check,
+          reason:
+            r.reason === "UNPAIRED_CAP"
+              ? "cap_not_paired"
+              : r.reason === "CAP_BOTTLE_MISMATCH" // CAP_MISMATCH_FLAG in lib/verify-cap.ts
+                ? "cap_bottle_mismatch"
+                : "outside_supply_region",
+        },
         next_step: null,
       }
     case "NOT_FOUND":

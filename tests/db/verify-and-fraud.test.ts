@@ -57,7 +57,7 @@ describe.skipIf(!TEST_DB)("verification and fraud rules (database)", () => {
     expect((await verifyBottle({ serialId: "REAL1" })).status).toBe("PROMPT_CAP")
   })
 
-  it("treats a second mismatch from the same phone as a real warning, still without flagging", async () => {
+  it("flags the cap on a second mismatch from the same phone, and keeps refusing it", async () => {
     const { manufacturer } = await makeManufacturer()
     await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "LABEL2", withCap: "CAPLABEL2XXXXXXX" })
     await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "SWAP2", withCap: "CAPSWAP2XXXXXXXX" })
@@ -69,12 +69,53 @@ describe.skipIf(!TEST_DB)("verification and fraud rules (database)", () => {
     if (second.result.status === "MISMATCH") expect(second.result.retry).toBe(false)
 
     const cap = await prisma.cap.findUniqueOrThrow({ where: { hiddenSerialId: "CAPSWAP2XXXXXXXX" } })
-    expect(cap.status).toBe("SEALED")
+    expect(cap.status).toBe("FLAGGED")
+    expect(cap.openedAt).toBeNull()
+
+    // Later, alone or from another browser, or even with its own label: refused.
+    const alone = await verifyCapDetailed({ hiddenSerialId: "CAPSWAP2XXXXXXXX", capLinkBottleId: "SWAP2" })
+    expect(alone.result.status).toBe("FLAGGED")
+    const own = await verifyCapDetailed({ hiddenSerialId: "CAPSWAP2XXXXXXXX", bottleSerialIds: ["SWAP2"], meta: { deviceHash: "phone-new" } })
+    expect(own.result.status).toBe("FLAGGED")
+    expect((await verifyBottle({ serialId: "SWAP2" })).status).toBe("FLAGGED")
+
     const alerts = await prisma.alertLog.findMany({ where: { type: "INVALID_PAIRING" } })
     expect(alerts).toHaveLength(1)
     expect(alerts[0].severity).toBe("HIGH_CONCERN")
     expect(alerts[0].affectedCount).toBe(2)
-    expect(await prisma.scanLog.count({ where: { capId: cap.id, fraudFlag: true } })).toBe(1)
+    expect(await prisma.scanLog.count({ where: { capId: cap.id, fraudFlag: true } })).toBe(3)
+  })
+
+  it("will not pass a cap scanned alone while its mismatch alert is open", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "SHELF3", withCap: "CAPSHELF3XXXXXXX" })
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "OPEN3", withCap: "CAPOPEN3XXXXXXXX" })
+
+    await verifyCapDetailed({ hiddenSerialId: "CAPOPEN3XXXXXXXX", bottleSerialIds: ["SHELF3"], meta: { deviceHash: "phone-a" } })
+
+    // Bottle list expired, or another browser: only the cap link's own bottle id.
+    const alone = await verifyCapDetailed({ hiddenSerialId: "CAPOPEN3XXXXXXXX", capLinkBottleId: "OPEN3", meta: { deviceHash: "phone-b" } })
+    expect(alone.result.status).toBe("NEEDS_BOTTLE")
+    // No bottle at all (as the API without bottle_code)
+    expect((await verifyCapDetailed({ hiddenSerialId: "CAPOPEN3XXXXXXXX" })).result.status).toBe("NEEDS_BOTTLE")
+    const cap = await prisma.cap.findUniqueOrThrow({ where: { hiddenSerialId: "CAPOPEN3XXXXXXXX" } })
+    expect(cap.status).toBe("SEALED")
+
+    // With the right label it still passes.
+    const right = await verifyCapDetailed({ hiddenSerialId: "CAPOPEN3XXXXXXXX", bottleSerialIds: ["OPEN3"], meta: { deviceHash: "phone-b" } })
+    expect(right.result.status).toBe("GENUINE")
+  })
+
+  it("still passes a cap scanned alone once staff resolve its mismatch alert", async () => {
+    const { manufacturer } = await makeManufacturer()
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "SHELF4", withCap: "CAPSHELF4XXXXXXX" })
+    await makeBottle(manufacturer.id, { authMode: "PAIRED", serialId: "OPEN4", withCap: "CAPOPEN4XXXXXXXX" })
+    await verifyCapDetailed({ hiddenSerialId: "CAPOPEN4XXXXXXXX", bottleSerialIds: ["SHELF4"] })
+    await prisma.alertLog.updateMany({ where: { type: "INVALID_PAIRING" }, data: { resolved: true, resolvedAt: new Date() } })
+
+    const alone = await verifyCapDetailed({ hiddenSerialId: "CAPOPEN4XXXXXXXX", capLinkBottleId: "OPEN4" })
+    expect(alone.result.status).toBe("GENUINE")
+    if (alone.result.status === "GENUINE") expect(alone.result.pairingChecked).toBe(false)
   })
 
   it("passes one product opened out of region, records the drift and alerts the brand", async () => {

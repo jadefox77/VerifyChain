@@ -53,11 +53,8 @@ type RateLimited = { status: "RATE_LIMITED"; message: string }
 type Invalid = { status: "INVALID"; message: string }
 
 export type BottleActionResult = VerifyResult | RateLimited | Invalid
-export type CapActionResult =
-  | CapVerifyResult
-  | RateLimited
-  | Invalid
-  | { status: "NEEDS_BOTTLE"; message: string }
+// NEEDS_BOTTLE is part of CapVerifyResult
+export type CapActionResult = CapVerifyResult | RateLimited | Invalid
 
 const INVALID_QR =
   "This code is not valid. It may have been altered, or the product may not be genuine."
@@ -157,7 +154,10 @@ export async function verifyCapAction(
 
   const { result, capBottleSerialId } = await verifyCapDetailed({
     hiddenSerialId: id.data,
-    bottleSerialIds: scannedBottles.length > 0 ? scannedBottles : [bottleParam!],
+    bottleSerialIds: scannedBottles,
+    // Only used when no label was scanned. The engine refuses it while the
+    // cap has an open mismatch alert.
+    capLinkBottleId: bottleParam,
     lat: c.success ? c.data?.lat : undefined,
     lng: c.success ? c.data?.lng : undefined,
     meta: {
@@ -173,8 +173,5 @@ export async function verifyCapAction(
     await writeRecentBottles(recent.filter((b) => b.s !== capBottleSerialId))
   }
 
-  if (result.status === "GENUINE") {
-    return { ...result, pairingChecked: scannedBottles.length > 0 }
-  }
   return result
 }

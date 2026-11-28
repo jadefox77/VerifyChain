@@ -25,6 +25,10 @@ type CapVerifyInput = {
   // must belong to one of them. When absent, the cap can still be verified,
   // but refills cannot be caught.
   bottleSerialIds?: string[]
+  // The bottle id printed in a pre-paired cap's own QR link. Used to run the
+  // check when the shopper scanned no label, but it is not a real refill
+  // check, because the cap vouches for itself.
+  capLinkBottleId?: string
   lat?: number
   lng?: number
   meta?: ScanMeta
@@ -43,9 +47,13 @@ export type CapVerifyResult =
     }
   | { status: "WARNING"; message: string; firstOpened: Date; firstLocation: string | null }
   | { status: "FLAGGED"; message: string; reason: string }
-  // The cap is left sealed. retry is true the first time, when the shopper is
-  // asked to scan the label of the bottle they actually opened.
+  // retry true: the cap is left sealed and the shopper is asked to scan the
+  // label of the bottle they actually opened. retry false: the same source
+  // mismatched again after the retry, and the cap is now FLAGGED.
   | { status: "MISMATCH"; message: string; retry: boolean }
+  // The cap was scanned without a bottle label while an open mismatch alert
+  // exists for it. Nothing is changed; the shopper must scan the label first.
+  | { status: "NEEDS_BOTTLE"; message: string }
   | { status: "NOT_FOUND"; message: string }
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
@@ -55,6 +63,12 @@ export type CapVerifyResult =
 export const MISMATCH_REPEAT_WINDOW_MS = 30 * 60 * 1000
 
 const MISMATCH_REASON = "Cap and bottle identity mismatch"
+// The two log reasons that count as a real mismatch for the repeat rule. Scans
+// refused because of an earlier mismatch do not count.
+const MISMATCH_FIRST = `${MISMATCH_REASON} (retry offered)`
+const MISMATCH_AGAIN = `${MISMATCH_REASON} (again after retry)`
+// FLAGGED reason for a cap flagged after a repeated mismatch
+export const CAP_MISMATCH_FLAG = "CAP_BOTTLE_MISMATCH"
 const DRIFT_PREFIX = "Supply chain drift"
 
 function hasCoords(lat?: number, lng?: number): lat is number {
@@ -90,8 +104,10 @@ async function checkCap(
   input: CapVerifyInput,
   cap: CapWithBottle | null
 ): Promise<CapVerifyResult> {
-  const { bottleSerialIds, lat, lng, meta } = input
-  const scanned = (bottleSerialIds ?? []).filter(Boolean)
+  const { bottleSerialIds, capLinkBottleId, lat, lng, meta } = input
+  // Labels the shopper really scanned. Only these make a refill check.
+  const labelsScanned = (bottleSerialIds ?? []).filter(Boolean)
+  const scanned = labelsScanned.length > 0 ? labelsScanned : capLinkBottleId ? [capLinkBottleId] : []
 
   if (!cap) {
     return {
@@ -132,6 +148,31 @@ async function checkCap(
       },
     })
 
+  // A cap flagged after a repeated mismatch (never opened) stays refused,
+  // whatever label comes with it. The bottle's own label scan also reports it.
+  if (cap.status === "FLAGGED" && !cap.openedAt) {
+    await logScan(true, `${MISMATCH_REASON} (cap already flagged)`)
+    return {
+      status: "FLAGGED",
+      reason: CAP_MISMATCH_FLAG,
+      message:
+        "This cap was scanned with a bottle it does not belong to, more than once, so it has been flagged. The product may have been refilled. Do not consume it, and keep the pack.",
+    }
+  }
+
+  // Scanned alone (no label) while a mismatch on this cap is still open: the
+  // cap must not pass as "cap only", or a refill with a borrowed genuine cap
+  // could pass just by retrying later or in another browser. Nothing changes,
+  // and the shopper can still finish by scanning the right label first.
+  if (labelsScanned.length === 0 && cap.status === "SEALED" && (await hasOpenMismatchAlert(cap.id, bottle.batchId))) {
+    await logScan(false, `${MISMATCH_REASON} (cap scanned alone while alert open)`)
+    return {
+      status: "NEEDS_BOTTLE",
+      message:
+        "This cap was recently scanned with a different bottle's label, so it cannot be checked on its own. Scan the QR code on the label of the bottle you opened first, then scan this cap again.",
+    }
+  }
+
   // Pairing check: the cap must belong to one of the bottles that was scanned.
   // An honest shopper may have scanned a shelf label and then opened a
   // different bottle, so nothing is marked as opened or flagged here. The cap
@@ -140,7 +181,12 @@ async function checkCap(
   // only ever matches its own bottle's label.
   if (scanned.length > 0 && !scanned.includes(bottle.serialId)) {
     const repeat = await isRepeatMismatch(cap.id, meta)
-    await logScan(repeat, repeat ? `${MISMATCH_REASON} (again after retry)` : `${MISMATCH_REASON} (retry offered)`)
+    if (repeat) {
+      // The retry did not help, so the cap stops passing anywhere. Only a
+      // cap that was never opened is flagged here.
+      await prisma.cap.updateMany({ where: { id: cap.id, status: "SEALED" }, data: { status: "FLAGGED" } })
+    }
+    await logScan(repeat, repeat ? MISMATCH_AGAIN : MISMATCH_FIRST)
     await recordMismatchAlert({
       capId: cap.id,
       bottleSerialId: bottle.serialId,
@@ -157,13 +203,13 @@ async function checkCap(
           status: "MISMATCH",
           retry: false,
           message:
-            "This cap still does not match the bottle label you scanned. If the label and this cap are on the same bottle, the cap may have come from another bottle and the product may have been refilled. Do not consume it, and keep the pack.",
+            "This cap still does not match the bottle label you scanned. If the label and this cap are on the same bottle, the cap may have come from another bottle and the product may have been refilled. The cap has been flagged. Do not consume it, and keep the pack.",
         }
       : {
           status: "MISMATCH",
           retry: true,
           message:
-            "This cap does not match the bottle label you scanned. If you opened a different bottle, scan the label on the bottle you opened, then scan this cap again. Nothing has been marked as opened yet.",
+            "This cap does not match the bottle label you scanned. If you opened a different bottle, scan the label on the bottle you opened, then scan this cap again. Nothing has been marked as opened yet. If the same mismatch happens again, the cap will be flagged.",
         }
   }
 
@@ -249,12 +295,22 @@ async function checkCap(
     message: `This ${productName} is genuine. This is the first time the cap has been opened.`,
     productName,
     openedAt: now,
-    pairingChecked: scanned.length > 0,
+    pairingChecked: labelsScanned.length > 0,
     outsideRegion: Boolean(driftReason),
   }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// Is there an unresolved mismatch alert for this cap? Alerts are one per cap
+// and carry the cap id in their detail.
+async function hasOpenMismatchAlert(capId: string, batchId: string): Promise<boolean> {
+  const open = await prisma.alertLog.findFirst({
+    where: { type: "INVALID_PAIRING", resolved: false, batchId, detail: { contains: capId } },
+    select: { id: true },
+  })
+  return open !== null
+}
 
 // Has this same source already had a mismatch on this cap recently?
 async function isRepeatMismatch(capId: string, meta?: ScanMeta): Promise<boolean> {
@@ -270,7 +326,7 @@ async function isRepeatMismatch(capId: string, meta?: ScanMeta): Promise<boolean
     where: {
       capId,
       ...source,
-      flagReason: { startsWith: MISMATCH_REASON },
+      flagReason: { in: [MISMATCH_FIRST, MISMATCH_AGAIN] },
       scannedAt: { gte: new Date(Date.now() - MISMATCH_REPEAT_WINDOW_MS) },
     },
     select: { id: true },
@@ -320,6 +376,8 @@ async function recordMismatchAlert(a: {
   lat?: number
   lng?: number
 }) {
+  const firstMessage = `A cap from bottle ${a.bottleSerialId} (batch ${a.batchCode}) was scanned with a different bottle's label. The cap was left sealed and the shopper was asked to scan the bottle they opened.`
+  const flaggedMessage = `A cap from bottle ${a.bottleSerialId} (batch ${a.batchCode}) was scanned with a different bottle's label again after a retry, so the cap was flagged.`
   try {
     const open = await prisma.alertLog.findFirst({
       where: { type: "INVALID_PAIRING", resolved: false, batchId: a.batchId, detail: { contains: a.capId } },
@@ -330,6 +388,7 @@ async function recordMismatchAlert(a: {
         where: { id: open.id },
         data: {
           affectedCount: (open.affectedCount ?? 1) + 1,
+          ...(a.repeat ? { message: flaggedMessage } : {}),
           ...(a.repeat && open.severity === "SUSPICIOUS" ? { severity: "HIGH_CONCERN" as const } : {}),
         },
       })
@@ -342,7 +401,7 @@ async function recordMismatchAlert(a: {
         manufacturerId: a.manufacturerId,
         batchId: a.batchId,
         affectedCount: 1,
-        message: `A cap from bottle ${a.bottleSerialId} (batch ${a.batchCode}) was scanned with a different bottle's label. The cap was left sealed and the shopper was asked to scan the bottle they opened.`,
+        message: a.repeat ? flaggedMessage : firstMessage,
         detail: JSON.stringify({
           capId: a.capId,
           capBottleSerialId: a.bottleSerialId,

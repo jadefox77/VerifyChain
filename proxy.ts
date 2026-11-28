@@ -52,8 +52,6 @@ export async function proxy(req: NextRequest) {
     "/login",
     "/unauthorized",
     "/verify",
-    "/api/verify",
-    "/api/verify-cap",
     "/api/brand-image",
     "/api/v1",
     "/developers",

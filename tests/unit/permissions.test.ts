@@ -4,7 +4,7 @@ import { parseNewMember } from "@/lib/team"
 
 describe("dashboard permissions", () => {
   it("gives a manufacturer admin everything", () => {
-    for (const cap of ["manageProducts", "createBatches", "viewBilling", "manageTeam"] as const) {
+    for (const cap of ["manageProducts", "createBatches", "viewBilling", "manageTeam", "manageBrand"] as const) {
       expect(can("MANUFACTURER_ADMIN", cap)).toBe(true)
     }
   })
@@ -15,6 +15,7 @@ describe("dashboard permissions", () => {
     expect(can("FACTORY_OPERATOR", "viewBilling")).toBe(false)
     expect(can("FACTORY_OPERATOR", "manageTeam")).toBe(false)
     expect(can("FACTORY_OPERATOR", "manageProducts")).toBe(false)
+    expect(can("FACTORY_OPERATOR", "manageBrand")).toBe(false)
   })
 
   it("keeps a distributor manager read-only", () => {
@@ -22,6 +23,7 @@ describe("dashboard permissions", () => {
     expect(can("DISTRIBUTOR_MANAGER", "viewFraud")).toBe(true)
     expect(can("DISTRIBUTOR_MANAGER", "createBatches")).toBe(false)
     expect(can("DISTRIBUTOR_MANAGER", "exportBatches")).toBe(false)
+    expect(can("DISTRIBUTOR_MANAGER", "manageBrand")).toBe(false)
   })
 
   it("gives staff roles and unknown values nothing in the dashboard", () => {
@@ -50,5 +52,13 @@ describe("parseNewMember", () => {
       ok: false,
       error: "bad_email",
     })
+  })
+})
+
+describe("API key permission", () => {
+  it("is for manufacturer admins only", () => {
+    expect(can("MANUFACTURER_ADMIN", "manageApi")).toBe(true)
+    expect(can("FACTORY_OPERATOR", "manageApi")).toBe(false)
+    expect(can("DISTRIBUTOR_MANAGER", "manageApi")).toBe(false)
   })
 })

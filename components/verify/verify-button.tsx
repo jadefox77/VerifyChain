@@ -22,7 +22,7 @@ export function VerifyButton({
         onClick={onClick}
         disabled={pending}
         aria-busy={pending}
-        className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-4 text-base font-semibold text-white transition-colors hover:bg-brand-700 active:bg-brand-800 disabled:opacity-70 dark:bg-brand-500 dark:text-gray-950 dark:hover:bg-brand-400"
+        className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-4 text-base font-semibold text-[var(--brand-on-primary,#fff)] transition-colors hover:bg-brand-700 active:bg-brand-800 disabled:opacity-70 dark:bg-brand-500 dark:text-[var(--brand-on-primary-dark,#030712)] dark:hover:bg-brand-400"
       >
         {pending ? (
           <>

@@ -74,3 +74,12 @@ export async function resetLimit(limiter: Ratelimit, key: string): Promise<void>
     console.error("Rate limit reset failed:", error)
   }
 }
+
+// Verification API, per key. Generous for a brand's whole website; the
+// per-shopper limit below does the real work for browser keys.
+export const apiKeyRatelimit = new Ratelimit({
+  redis,
+  prefix: "rl:api-key",
+  limiter: Ratelimit.slidingWindow(300, "1 m"),
+  analytics: true,
+})

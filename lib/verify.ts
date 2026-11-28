@@ -103,6 +103,7 @@ export async function verifyBottle(
       ipHash: meta?.ipHash ?? null,
       deviceHash: meta?.deviceHash ?? null,
       userAgent: meta?.userAgent ?? null,
+      apiKeyId: meta?.apiKeyId ?? null,
     },
   })
 
@@ -169,6 +170,7 @@ export async function verifyBottle(
         ipHash: meta?.ipHash ?? null,
         deviceHash: meta?.deviceHash ?? null,
         userAgent: meta?.userAgent ?? null,
+        apiKeyId: meta?.apiKeyId ?? null,
       },
     })
 

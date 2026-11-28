@@ -7,11 +7,12 @@ const TONES: Record<
   ResultTone,
   { box: string; icon: string; title: string; body: string; Icon: typeof CheckCircle2 }
 > = {
+  // Fixed green, not the brand-* scale, so a brand page cannot recolour a pass.
   good: {
-    box: "border-brand-200 bg-brand-50 dark:border-brand-500/30 dark:bg-brand-500/10",
-    icon: "text-brand-600 dark:text-brand-400",
-    title: "text-brand-900 dark:text-brand-100",
-    body: "text-brand-900/80 dark:text-brand-100/80",
+    box: "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10",
+    icon: "text-emerald-600 dark:text-emerald-400",
+    title: "text-emerald-900 dark:text-emerald-100",
+    body: "text-emerald-900/80 dark:text-emerald-100/80",
     Icon: CheckCircle2,
   },
   warn: {

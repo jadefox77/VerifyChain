@@ -94,6 +94,11 @@ enum ScanLayer {
   CAP    // Hidden internal cap QR scan
 }
 
+enum ApiKeyKind {
+  SECRET      // Server to server. Refused when sent from a browser.
+  PUBLISHABLE // Browser use on the brand's own website, locked to its domains
+}
+
 enum AuthMode {
   PAIRED  // Bottle QR + Hidden Cap QR — bottles, jars, spirits
   SINGLE  // Single QR only — cans, sachets, cartons, pouches
@@ -190,6 +195,13 @@ model Manufacturer {
   alertLogs  AlertLog[]
   adminNotes AdminNote[]
 
+  // Branded verification page (logo, colours, links) and uploaded images
+  brandProfile BrandProfile?
+  brandImages  BrandImage[]
+
+  // Verification API keys for the brand's own website or app
+  apiKeys ApiKey[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -214,6 +226,10 @@ model Product {
   description String?
   active      Boolean @default(true)
   authMode AuthMode @default(PAIRED)
+
+  // Picture shown to shoppers on the branded verification page
+  imageId String?
+  image   BrandImage? @relation("ProductImage", fields: [imageId], references: [id], onDelete: SetNull)
 
   batches Batch[]
 
@@ -338,6 +354,8 @@ model ScanLog {
   ipHash      String?  // Keyed hash of the client IP, never the raw IP
   deviceHash  String?  // Keyed hash of the anonymous vc_device cookie (web scans)
   userAgent   String?
+  apiKeyId    String?  // Set when the check came through the verification API
+  apiKey      ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
 
   // Timing
   scannedAt   DateTime @default(now())
@@ -350,6 +368,113 @@ model ScanLog {
   @@index([lat, lng])
   @@index([ipHash, scannedAt])
   @@index([deviceHash, scannedAt])
+  @@index([apiKeyId, scannedAt])
+}
+
+// =============================================================================
+// BRAND PROFILE
+// =============================================================================
+// How a manufacturer's products look when shoppers scan them. The result of a
+// check (genuine, warning, flagged) always comes from the verification engine
+// and keeps VerifyChain's fixed colours; the brand only styles the frame.
+
+model BrandProfile {
+  manufacturerId String       @id
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+
+  // Shoppers see the branded page only when this is on
+  enabled Boolean @default(false)
+
+  displayName String? // Defaults to the company name
+  tagline     String?
+
+  logoImageId String?     @unique
+  logoImage   BrandImage? @relation("BrandLogo", fields: [logoImageId], references: [id], onDelete: SetNull)
+
+  primaryColor    String @default("#078f5a") // Buttons and highlights
+  secondaryColor  String @default("#0b4a34") // Header band and links
+  backgroundColor String @default("#f9fafb") // Page background (light mode)
+  fontStyle       String @default("sans") // sans | serif | rounded
+
+  websiteUrl   String?
+  supportUrl   String?
+  supportEmail String?
+  supportPhone String?
+  instagramUrl String?
+  facebookUrl  String?
+  xUrl         String?
+  tiktokUrl    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+// Small images (logos, product pictures) stored in the database so the
+// scan pages never load images from third-party hosts. PNG, JPEG or WebP,
+// checked by their bytes, at most 300 KB each.
+model BrandImage {
+  id             String       @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+
+  contentType String
+  byteSize    Int
+  data        Bytes
+
+  logoFor  BrandProfile? @relation("BrandLogo")
+  products Product[]     @relation("ProductImage")
+
+  createdAt DateTime @default(now())
+
+  @@index([manufacturerId])
+}
+
+// =============================================================================
+// VERIFICATION API
+// =============================================================================
+// Keys a brand uses to call the same verification engine as the scan pages
+// from its own website or app. Only a SHA-256 hash of each key is stored; the
+// full key is shown once, when it is created.
+
+model ApiKey {
+  id             String       @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+
+  name    String
+  kind    ApiKeyKind
+  prefix  String // First characters, shown in the dashboard to tell keys apart
+  keyHash String @unique
+
+  // Hostnames a publishable key may be used from, such as "shop.example.com"
+  // or "*.example.com". Ignored for secret keys.
+  allowedDomains String[] @default([])
+
+  createdById String?
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  revokedById String?
+
+  usage    ApiUsageDay[]
+  scanLogs ScanLog[]
+
+  @@index([manufacturerId])
+}
+
+// Request counts per key per Lagos calendar day ("YYYY-MM-DD").
+model ApiUsageDay {
+  apiKeyId String
+  apiKey   ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  day      String
+
+  requests  Int @default(0) // Every request that reached the key check
+  authentic Int @default(0)
+  warnings  Int @default(0) // already_verified, suspicious, scan_cap
+  notFound  Int @default(0) // not_found, invalid
+  rejected  Int @default(0) // Bad input, wrong domain, rate limited
+
+  @@id([apiKeyId, day])
 }
 
 // =============================================================================

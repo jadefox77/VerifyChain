@@ -6,10 +6,12 @@ import Link from "next/link"
 import {
   Boxes,
   CreditCard,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
   Package,
+  Palette,
   ScanLine,
   ShieldAlert,
   Users,
@@ -32,6 +34,8 @@ const navItems: { href: string; label: string; icon: typeof Boxes; exact?: boole
   { href: "/dashboard/batches", label: "Batches", icon: Boxes, needs: "viewBatches" },
   { href: "/dashboard/scans", label: "Scan activity", icon: ScanLine, needs: "viewScans" },
   { href: "/dashboard/fraud", label: "Fraud alerts", icon: ShieldAlert, needs: "viewFraud" },
+  { href: "/dashboard/brand", label: "Brand page", icon: Palette, needs: "manageBrand" },
+  { href: "/dashboard/developers", label: "API keys", icon: KeyRound, needs: "manageApi" },
   { href: "/dashboard/team", label: "Team", icon: Users, needs: "manageTeam" },
   { href: "/dashboard/billing", label: "Plan and usage", icon: CreditCard, needs: "viewBilling" },
 ]

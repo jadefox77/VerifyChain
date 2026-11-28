@@ -13,6 +13,8 @@ export type Capability =
   | "viewFraud"
   | "viewBilling"
   | "manageTeam"
+  | "manageBrand"
+  | "manageApi"
 
 export const MANUFACTURER_ROLE_LIST: ManufacturerRole[] = [
   "MANUFACTURER_ADMIN",
@@ -32,6 +34,8 @@ const CAPABILITIES: Record<ManufacturerRole, Capability[]> = {
     "viewFraud",
     "viewBilling",
     "manageTeam",
+    "manageBrand",
+    "manageApi",
   ],
   // The production line: make batches and download their QR files.
   FACTORY_OPERATOR: ["viewProducts", "viewBatches", "createBatches", "exportBatches", "viewScans"],
@@ -55,7 +59,7 @@ export const TEAM_ROLE_LABELS: Record<ManufacturerRole, string> = {
 }
 
 export const TEAM_ROLE_DESCRIPTIONS: Record<ManufacturerRole, string> = {
-  MANUFACTURER_ADMIN: "Everything, including the plan and the team.",
+  MANUFACTURER_ADMIN: "Everything, including the plan, the team, the brand page and API keys.",
   FACTORY_OPERATOR: "Products, batches and scans. Can make batches and download QR files.",
   DISTRIBUTOR_MANAGER: "Read-only view of products, batches, scans and fraud alerts.",
 }

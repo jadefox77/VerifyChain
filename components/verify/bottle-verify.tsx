@@ -1,29 +1,41 @@
-"use client"
+'use client'
 
-import { useState, useTransition } from "react"
-import { CheckCircle2, ScanLine } from "lucide-react"
-import { CountdownTimer } from "@/components/verify/countdown-timer"
-import { VerifyButton } from "@/components/verify/verify-button"
-import { getLocation } from "@/components/verify/get-location"
-import { ResultCard, WhatToDo } from "@/components/verify/result-card"
-import { formatSerialId } from "@/lib/serial-format"
+import { useState, useTransition } from 'react'
+import { CheckCircle2, ScanLine } from 'lucide-react'
+import { CountdownTimer } from '@/components/verify/countdown-timer'
+import { VerifyButton } from '@/components/verify/verify-button'
+import { getLocation } from '@/components/verify/get-location'
+import { ResultCard, WhatToDo } from '@/components/verify/result-card'
+import { ProductCard } from '@/components/verify/brand-shell'
+import type { ProductView } from '@/lib/brand'
+import { formatSerialId } from '@/lib/serial-format'
 import {
   verifyBottleAction,
   type BottleActionResult,
-} from "@/lib/verify-actions"
+} from '@/lib/verify-actions'
 
 const DATE_FORMAT: Intl.DateTimeFormatOptions = {
-  timeZone: "Africa/Lagos",
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
+  timeZone: 'Africa/Lagos',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
 }
 
-const fmt = (d: Date | string) => new Date(d).toLocaleString("en-NG", DATE_FORMAT)
+const fmt = (d: Date | string) =>
+  new Date(d).toLocaleString('en-NG', DATE_FORMAT)
 
-export function BottleVerify({ serialId, sig }: { serialId: string; sig?: string }) {
+export function BottleVerify({
+  serialId,
+  sig,
+  product,
+}: {
+  serialId: string
+  sig?: string
+  /** Set only when the brand has a published brand page */
+  product?: ProductView | null
+}) {
   const [result, setResult] = useState<BottleActionResult | null>(null)
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +47,9 @@ export function BottleVerify({ serialId, sig }: { serialId: string; sig?: string
         const coords = await getLocation()
         setResult(await verifyBottleAction(serialId, sig, coords))
       } catch {
-        setError("We could not complete the check. Check your internet connection and try again.")
+        setError(
+          'We could not complete the check. Check your internet connection and try again.'
+        )
       }
     })
   }
@@ -48,13 +62,16 @@ export function BottleVerify({ serialId, sig }: { serialId: string; sig?: string
             Check this product
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-            Tap the button to confirm this pack is genuine. Your result appears on
-            this screen in a few seconds.
+            Tap the button to confirm this pack is genuine. Your result appears
+            on this screen in a few seconds.
           </p>
         </div>
         <VerifyButton onClick={run} pending={pending} />
         {error && (
-          <p role="alert" className="text-center text-sm text-red-600 dark:text-red-400">
+          <p
+            role="alert"
+            className="text-center text-sm text-red-600 dark:text-red-400"
+          >
             {error}
           </p>
         )}
@@ -63,79 +80,112 @@ export function BottleVerify({ serialId, sig }: { serialId: string; sig?: string
   }
 
   switch (result.status) {
-    case "INVALID":
-    case "NOT_FOUND":
+    case 'INVALID':
+    case 'NOT_FOUND':
       return (
         <>
-          <ResultCard tone="bad" title="We could not verify this product" message={result.message} />
+          <ResultCard
+            tone="bad"
+            title="We could not verify this product"
+            message={result.message}
+          />
           <WhatToDo />
         </>
       )
 
-    case "RATE_LIMITED":
-      return <ResultCard tone="wait" title="Please wait a moment" message={result.message} />
+    case 'RATE_LIMITED':
+      return (
+        <ResultCard
+          tone="wait"
+          title="Please wait a moment"
+          message={result.message}
+        />
+      )
 
-    case "FLAGGED":
+    case 'FLAGGED':
       return (
         <>
-          <ResultCard tone="bad" title="Do not use this product" message={result.message} />
+          <ResultCard
+            tone="bad"
+            title="Do not use this product"
+            message={result.message}
+          />
           <WhatToDo />
         </>
       )
 
-    case "CAP_ALREADY_OPENED":
+    case 'CAP_ALREADY_OPENED':
       return (
         <>
-          <ResultCard tone="bad" title="This bottle has been opened before" message={result.message} />
+          <ResultCard
+            tone="bad"
+            title="This bottle has been opened before"
+            message={result.message}
+          />
           <WhatToDo />
         </>
       )
 
-    case "ALREADY_VERIFIED":
+    case 'ALREADY_VERIFIED':
       return (
         <ResultCard
           tone="warn"
           title="Already checked"
           message={result.message}
-          details={[{ label: "First checked", value: fmt(result.firstScan) }]}
+          details={[{ label: 'First checked', value: fmt(result.firstScan) }]}
         />
       )
 
-    case "GENUINE_SINGLE":
+    case 'GENUINE_SINGLE':
       return (
-        <ResultCard
-          tone="good"
-          title="Genuine code, first check"
-          message={result.message}
-          details={[
-            { label: "Product", value: result.productName },
-            { label: "Checked", value: fmt(result.openedAt) },
-          ]}
-          note="A single code can be copied, and this check cannot tell an original pack from a copy that is scanned first. What it does mean: nobody had checked this code before you. If anyone scans it again, they will be told it was already checked, and scans from another phone are flagged to the manufacturer. Check the seal and packaging too."
-        />
+        <>
+          <ResultCard
+            tone="good"
+            title="Genuine code, first check"
+            message={result.message}
+            details={[
+              { label: 'Product', value: result.productName },
+              { label: 'Checked', value: fmt(result.openedAt) },
+            ]}
+            note="A single code can be copied, and this check cannot tell an original pack from a copy that is scanned first. What it does mean: nobody had checked this code before you. If anyone scans it again, they will be told it was already checked, and scans from another phone are flagged to the manufacturer. Check the seal and packaging too."
+          />
+          {product && <ProductCard product={product} />}
+        </>
       )
 
-    case "PROMPT_CAP":
+    case 'PROMPT_CAP':
       return (
         <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+            <CheckCircle2
+              className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
             <div>
-              <p className="text-sm font-semibold text-brand-900 dark:text-brand-100">Bottle found</p>
-              <p className="mt-0.5 text-sm text-brand-900/80 dark:text-brand-100/80">{result.productName}</p>
+              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                Bottle found
+              </p>
+              <p className="mt-0.5 text-sm text-emerald-900/80 dark:text-emerald-100/80">
+                {result.productName}
+              </p>
             </div>
           </div>
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Step 2 of 2</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              Step 2 of 2
+            </p>
             <h1 className="mt-1 flex items-center gap-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
-              <ScanLine className="h-5 w-5 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+              <ScanLine
+                className="h-5 w-5 text-brand-600 dark:text-brand-400"
+                aria-hidden="true"
+              />
               Scan the code inside the cap
             </h1>
             <ol className="mt-4 space-y-3 text-sm text-gray-700 dark:text-gray-300">
               {[
-                "Open the bottle.",
-                "Find the QR code printed on the inside of the cap.",
+                'Open the bottle.',
+                'Find the QR code printed on the inside of the cap.',
                 "Scan it with this phone's camera and tap Confirm.",
               ].map((step, i) => (
                 <li key={step} className="flex gap-3">
@@ -158,11 +208,13 @@ export function BottleVerify({ serialId, sig }: { serialId: string; sig?: string
                   {formatSerialId(result.topCode)}
                 </p>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  If this does not match the code on your cap, the cap may have been swapped.
+                  If this does not match the code on your cap, the cap may have
+                  been swapped.
                 </p>
               </div>
             )}
           </section>
+          {product && <ProductCard product={product} />}
         </div>
       )
 

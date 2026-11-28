@@ -17,7 +17,7 @@ export function assertLocalDatabase() {
 export async function resetDatabase() {
   assertLocalDatabase()
   await prisma.$executeRawUnsafe(
-    `TRUNCATE "AlertLog", "ScanLog", "Cap", "Bottle", "Batch", "Product", "AuditLog", "AdminNote", "Manufacturer", "Account", "Session", "User" RESTART IDENTITY CASCADE`
+    `TRUNCATE "ApiUsageDay", "ApiKey", "BrandProfile", "BrandImage", "AlertLog", "ScanLog", "Cap", "Bottle", "Batch", "Product", "AuditLog", "AdminNote", "Manufacturer", "Account", "Session", "User" RESTART IDENTITY CASCADE`
   )
 }
 

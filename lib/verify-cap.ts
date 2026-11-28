@@ -8,6 +8,8 @@ export type ScanMeta = {
   // Keyed hash of the anonymous device cookie (web scans only)
   deviceHash?: string | null
   userAgent?: string | null
+  // Verification API key that made the request, if any
+  apiKeyId?: string | null
 }
 
 type CapVerifyInput = {
@@ -100,6 +102,7 @@ async function checkCap(
         ipHash: meta?.ipHash ?? null,
         deviceHash: meta?.deviceHash ?? null,
         userAgent: meta?.userAgent ?? null,
+        apiKeyId: meta?.apiKeyId ?? null,
       },
     })
 
